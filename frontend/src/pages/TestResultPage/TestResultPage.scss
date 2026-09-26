@@ -1,0 +1,129 @@
+/* Styles migrated from the legacy application stylesheets. */
+
+.result-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 25px 30px;
+  border-radius: 14px;
+  background: linear-gradient(115deg, #132948, #235a80);
+  color: white;
+}
+.result-hero h1 {
+  margin: 6px 0;
+  font: 800 25px Manrope;
+}
+.result-hero p {
+  margin: 0;
+  color: #c4d4e3;
+  font-size: 11px;
+}
+.result-medal {
+  position: absolute;
+  right: 36px;
+  top: 20px;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border: 1px solid #fff4;
+  border-radius: 50%;
+  background: #ffffff12;
+  color: #8fe0d1;
+  font-size: 23px;
+}
+.result-stats {
+  display: flex;
+  gap: 30px;
+  margin-top: 20px;
+}
+.result-stats div {
+  display: grid;
+  gap: 3px;
+}
+.result-stats b {
+  font: 800 22px Manrope;
+}
+.result-stats small {
+  color: #c4d4e3;
+  font-size: 9px;
+}
+.result-layout {
+  display: grid;
+  grid-template-columns: 1.5fr 0.75fr;
+  gap: 14px;
+  margin: 15px 0;
+}
+.scores-panel, .review-aside {
+  padding: 18px;
+}
+.score-row {
+  display: grid;
+  grid-template-columns: 116px 1fr 38px 38px;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.score-part {
+  font-weight: 700;
+  font-size: 10px;
+}
+.score-part small {
+  display: block;
+  margin-top: 4px;
+  color: #9aa5b4;
+  font-size: 8px;
+  font-weight: 400;
+}
+.score-meter {
+  height: 6px;
+  border-radius: 9px;
+  background: #edf1f6;
+}
+.score-meter span {
+  display: block;
+  height: 100%;
+  border-radius: 9px;
+  background: linear-gradient(90deg, #4280e4, #4fc5b3);
+}
+.score-value {
+  font-weight: 700;
+  font-size: 10px;
+}
+.score-value small {
+  color: #9aa5b4;
+}
+.score-percent {
+  color: #64809f;
+  font-size: 9px;
+}
+.review-aside h3 {
+  font: 750 15px Manrope;
+}
+.review-aside p {
+  color: #8490a2;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.review-aside .button {
+  width: 100%;
+}
+.review-aside > .text-button {
+  margin-top: 10px;
+}
+@media (max-width: 800px) {
+  .result-layout {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .score-row {
+    grid-template-columns: 85px 1fr 27px 30px;
+    gap: 6px;
+  }
+}
+@media (max-width: 560px) {
+  .result-stats {
+    gap: 18px;
+  }
+}

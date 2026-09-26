@@ -1,0 +1,137 @@
+/* Styles migrated from the legacy application stylesheets. */
+
+.setup-hero {
+  padding: 26px 30px;
+  margin-bottom: 15px;
+  border-radius: 13px;
+  background: linear-gradient(115deg, #152c4d, #28658b);
+  color: white;
+}
+.setup-hero h1 {
+  margin: 8px 0;
+  font: 800 28px Manrope;
+}
+.setup-hero p {
+  color: #c6d7e8;
+  font-size: 12px;
+}
+.setup-hero-stats {
+  display: flex;
+  gap: 22px;
+  margin-top: 18px;
+  color: #d7e5f1;
+  font-size: 10px;
+}
+.setup-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(230px, 0.8fr);
+  gap: 15px;
+}
+.setup-card {
+  padding: 22px;
+}
+.setup-card h2 {
+  margin: 0 0 13px;
+  font: 750 16px Manrope;
+}
+.setup-card h2:not(:first-child) {
+  margin-top: 22px;
+}
+.choice-list {
+  display: grid;
+  gap: 8px;
+}
+.choice-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid #e7ebf1;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.choice-row.selected {
+  border-color: #9bbbf1;
+  background: #f5f8ff;
+}
+.choice-row input {
+  accent-color: #2d6bd6;
+}
+.choice-row span {
+  display: grid;
+  gap: 4px;
+}
+.choice-row b {
+  font-size: 11px;
+}
+.choice-row small {
+  color: #929eae;
+  font-size: 10px;
+}
+.field-select {
+  width: 100%;
+  height: 39px;
+  margin-top: 10px;
+  padding: 0 10px;
+  border: 1px solid #dfe5ed;
+  border-radius: 7px;
+  background: #fff;
+}
+.count-options {
+  display: flex;
+  gap: 8px;
+}
+.count-options button {
+  display: grid;
+  place-items: center;
+  min-width: 65px;
+  padding: 9px;
+  border: 1px solid #e1e6ed;
+  border-radius: 8px;
+  background: white;
+  font-weight: 700;
+}
+.count-options button.selected {
+  border-color: #7ca4e9;
+  background: #f2f6ff;
+  color: #285cb9;
+}
+.count-options small {
+  color: #8c99ab;
+  font-size: 9px;
+  font-weight: 400;
+}
+.type-options {
+  display: grid;
+  gap: 10px;
+  color: #65748a;
+  font-size: 11px;
+}
+.type-options input {
+  accent-color: #2d6bd6;
+}
+.setup-card > .button {
+  width: 100%;
+  margin-top: 19px;
+}
+@media (max-width: 800px) {
+  .setup-layout {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .setup-hero {
+    padding: 21px;
+  }
+}
+@media (max-width: 560px) {
+  .setup-hero h1 {
+    font-size: 23px;
+  }
+}
+@media (max-width: 560px) {
+  .setup-hero-stats {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,19 @@
+/* Styles migrated from the legacy application stylesheets. */
+
+:root {
+  --ink: #192940;
+  --muted: #748096;
+  --line: #e7ebf1;
+  --paper: #fff;
+  --canvas: #f6f8fb;
+  --blue: #2563eb;
+  --navy: #142a48;
+  --teal: #30c6b2;
+  --shadow: 0 8px 24px rgba(26, 48, 82, 0.055);
+  --content-inline-padding: 38px;
+}
+@media (max-width: 800px) {
+  :root {
+    --content-inline-padding: 18px;
+  }
+}

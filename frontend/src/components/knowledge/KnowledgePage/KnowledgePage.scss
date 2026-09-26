@@ -1,0 +1,70 @@
+.tip-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tip-overview {
+  padding: 20px;
+  border: 1px solid #e8edf3;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.tip-overview h2 {
+  margin: 8px 0;
+  font-size: 16px;
+}
+
+.tip-overview p {
+  margin: 0;
+  color: #69798f;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.knowledge-articles {
+  margin-top: 28px;
+}
+
+.knowledge-articles .section-title h2 {
+  font-size: 20px;
+}
+
+.tip-article-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tip-article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #e8edf3;
+  border-radius: 9px;
+  color: #253753;
+  text-decoration: none;
+}
+
+.tip-article:hover {
+  border-color: #9ab8ea;
+  background: #f7faff;
+}
+
+.tip-article small {
+  color: #8290a3;
+}
+
+@media (max-width: 760px) {
+  .tip-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tip-article {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+}

@@ -1,0 +1,98 @@
+.vocabulary-result-hero {
+  display: grid;
+  gap: 28px;
+  justify-items: center;
+  padding: 36px;
+}
+
+.vocabulary-quiz-progress {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: min(100%, 520px);
+}
+
+.vocabulary-quiz-score-ring {
+  display: grid;
+  width: 108px;
+  height: 108px;
+  flex: 0 0 108px;
+  place-items: center;
+  border: 10px solid #dfeaff;
+  border-top-color: #3d77d4;
+  border-right-color: #6c58cc;
+  border-radius: 50%;
+}
+
+.vocabulary-quiz-score-ring span {
+  color: #2e61b6;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.vocabulary-quiz-progress h2 {
+  margin: 4px 0;
+  font-size: 22px;
+}
+
+.vocabulary-quiz-progress p {
+  margin: 0;
+  color: #8290a3;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vocabulary-review-list {
+  margin-top: 16px;
+  padding: 20px;
+}
+
+.vocabulary-review-list > .panel-heading > span {
+  color: #8290a3;
+  font-size: 11px;
+}
+
+.vocabulary-review-item {
+  padding: 16px 0;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.vocabulary-review-item:last-child {
+  border-bottom: 0;
+}
+
+.vocabulary-review-item h3 {
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.vocabulary-review-answer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: #69798f;
+  font-size: 11px;
+}
+
+.vocabulary-review-answer strong {
+  color: #253753;
+}
+
+.vocabulary-review-example {
+  margin: 10px 0 0;
+  color: #8290a3;
+  font-size: 11px;
+  font-style: italic;
+}
+
+@media (max-width: 640px) {
+  .vocabulary-result-hero {
+    padding: 24px 16px;
+  }
+
+  .vocabulary-quiz-progress {
+    align-items: flex-start;
+    flex-direction: column;
+    text-align: center;
+  }
+}

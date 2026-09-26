@@ -1,0 +1,40 @@
+/* Styles migrated from the legacy application stylesheets. */
+
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  padding: 21px;
+}
+.account-card-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+.account-card .button-danger {
+  background: #dc3545;
+  border-color: #dc3545;
+  color: #fff;
+}
+.account-card h2 {
+  margin: 0 0 4px;
+  font: 750 18px Manrope;
+}
+.account-card p, .account-prompt p {
+  color: #8b97a7;
+  font-size: 11px;
+}
+.avatar-large {
+  width: 58px;
+  height: 58px;
+  font-size: 20px;
+}
+.account-prompt {
+  display: grid;
+  justify-items: center;
+  padding: 42px;
+  text-align: center;
+}
+.account-prompt .button {
+  margin-top: 10px;
+}

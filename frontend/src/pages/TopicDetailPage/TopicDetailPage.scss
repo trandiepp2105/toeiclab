@@ -1,0 +1,121 @@
+/* Styles migrated from the legacy application stylesheets. */
+
+.back-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 17px;
+  color: #94a0b1;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.topic-toolbar {
+  margin-top: 20px;
+}
+.word-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 13px;
+}
+.word-card {
+  padding: 16px 17px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.word-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.level-badge {
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #eaf4eb;
+  color: #389466;
+  font-size: 9px;
+  font-weight: 700;
+}
+.word-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+}
+.word-main h3 {
+  margin: 0 0 6px;
+  font: 800 22px Manrope;
+}
+.word-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #8390a2;
+  font-size: 10px;
+}
+.word-meaning {
+  margin: 11px 0 0;
+  font-size: 12px;
+}
+.audio-button {
+  display: inline-grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border: 0;
+  border-radius: 50%;
+  background: #eaf2ff;
+  color: #3572d9;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.audio-button:hover, .audio-button:focus-visible {
+  background: #d8e7ff;
+}
+.audio-button.is-playing {
+  background: #3572d9;
+  color: #fff;
+}
+.audio-missing {
+  color: #c2cad5;
+}
+.word-image {
+  width: 108px;
+  height: 82px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #f1f4f7;
+}
+.example-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding-top: 11px;
+  border-top: 1px solid #eff1f4;
+}
+.example-row p {
+  margin: 1px 0;
+  color: #738197;
+  font-size: 11px;
+  line-height: 1.55;
+}
+@media (max-width: 800px) {
+  .word-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .word-main h3 {
+    font-size: 19px;
+  }
+}
+@media (max-width: 560px) {
+  .word-image {
+    width: 82px;
+    height: 72px;
+  }
+}

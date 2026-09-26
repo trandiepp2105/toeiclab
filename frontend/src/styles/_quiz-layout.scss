@@ -1,0 +1,47 @@
+/* Styles migrated from the legacy application stylesheets. */
+
+.quiz-aside {
+  padding: 23px;
+  align-self: start;
+  background: linear-gradient(150deg, #fff, #f8faff);
+}
+.quiz-aside-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: #eff4ff;
+  color: #4979d0;
+  font-size: 19px;
+}
+.quiz-aside h3 {
+  margin: 12px 0 7px;
+  font: 750 16px Manrope;
+}
+.quiz-aside p, .quiz-aside > small {
+  color: #7f8ca0;
+  font-size: 11px;
+  line-height: 1.65;
+}
+.quiz-aside > small {
+  display: block;
+}
+.aside-rule {
+  height: 1px;
+  margin: 16px 0;
+  background: #e9edf3;
+}
+.quiz-aside .eyebrow {
+  display: block;
+}
+@media (max-width: 800px) {
+  .quiz-aside {
+    order: -1;
+  }
+}
+@media (max-width: 800px) {
+  .quiz-run-grid > .quiz-aside {
+    order: 0;
+  }
+}

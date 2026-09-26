@@ -1,0 +1,66 @@
+/* Styles migrated from the legacy application stylesheets. */
+
+.modal-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #14213980;
+  backdrop-filter: blur(4px);
+}
+.modal {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 29px;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 25px 80px #14213938;
+}
+.modal-close {
+  position: absolute;
+  right: 15px;
+  top: 11px;
+  border: 0;
+  background: transparent;
+  color: #7d8999;
+  font-size: 23px;
+}
+.modal h2 {
+  margin: 9px 0;
+  font: 800 21px Manrope;
+}
+.modal > p {
+  color: #8995a6;
+  font-size: 11px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+.modal form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+.modal label {
+  display: grid;
+  gap: 6px;
+  color: #68778d;
+  font-size: 10px;
+  font-weight: 700;
+}
+.modal input {
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid #dfe5ed;
+  border-radius: 7px;
+  outline-color: #75a1ec;
+}
+.modal form .button {
+  width: 100%;
+}

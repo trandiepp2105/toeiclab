@@ -1,0 +1,43 @@
+/* Styles migrated from the legacy application stylesheets. */
+
+.knowledge-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.knowledge-card {
+  padding: 19px;
+}
+.knowledge-card h2 {
+  font: 750 17px Manrope;
+}
+.knowledge-card > p {
+  color: #6f7d92;
+  font-size: 11px;
+  line-height: 1.75;
+  white-space: pre-line;
+}
+.quick-rule {
+  padding: 12px;
+  border-radius: 8px;
+  background: #f2f6ff;
+  color: #45699e;
+  font-size: 10px;
+}
+.quick-rule p {
+  margin: 5px 0 0;
+  line-height: 1.5;
+}
+.grammar-example {
+  margin-top: 10px;
+  padding: 10px;
+  border-left: 3px solid #63c1b3;
+  background: #f5fbfa;
+  color: #657c80;
+  font-size: 10px;
+}
+@media (max-width: 560px) {
+  .knowledge-grid {
+    grid-template-columns: 1fr;
+  }
+}
