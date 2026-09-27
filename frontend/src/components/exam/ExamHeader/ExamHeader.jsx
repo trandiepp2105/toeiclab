@@ -15,7 +15,7 @@ function ExamHeader({
   return (
     <header className="exam-header">
       <button className="exam-brand" onClick={onSubmit}>
-        <img className="brand-logo" src="/logo.jpeg" alt="TOEICLab" />
+        <img className="brand-logo" src="/logo.png" alt="TOEICLab" />
         <span>
           <b>
             <span className="brand-word-toeic">TOEIC</span>

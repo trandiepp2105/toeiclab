@@ -102,20 +102,41 @@
 }
 .result-section-score > div > b {
   color: #53647a;
-  font-size: 10px;
+  font-size: 13px;
 }
 .result-section-score strong {
   color: #293951;
-  font: 800 17px Manrope;
+  font: 800 24px Manrope;
 }
 .result-section-score strong small {
   color: #9aa5b4;
-  font: 500 10px Manrope;
+  font: 500 14px Manrope;
 }
 .result-section-score > span {
   color: #8290a2;
-  font-size: 9px;
+  font-size: 12px;
   text-align: right;
+}
+.result-score-method-note {
+  margin: 10px 0 0;
+  color: #8290a2;
+  font-size: 11px;
+}
+.result-score-validation {
+  padding: 13px 15px;
+  margin-top: 18px;
+  border: 1px solid #f0d7a7;
+  border-radius: 9px;
+  background: #fff9ed;
+  color: #77551b;
+  font-size: 13px;
+}
+.result-score-validation ul {
+  padding-left: 20px;
+  margin: 7px 0 0;
+}
+.result-score-validation li + li {
+  margin-top: 4px;
 }
 
 .review-list {
@@ -253,6 +274,20 @@
 @media (max-width: 560px) {
   .result-section-score {
     padding: 11px 13px;
+  }
+}
+@media (max-width: 560px) {
+  .result-section-score > div > b {
+    font-size: 12px;
+  }
+  .result-section-score strong {
+    font-size: 22px;
+  }
+  .result-section-score strong small {
+    font-size: 13px;
+  }
+  .result-section-score > span {
+    font-size: 11px;
   }
 }
 @media (max-width: 560px) {

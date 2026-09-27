@@ -67,7 +67,7 @@ function TestReviewPage({ attemptId, go }) {
           {isFullTest ? "Bài thi đầy đủ" : "Luyện tập theo Part"} ·{" "}
           {new Date(attempt.submitted_at).toLocaleString("vi-VN")}
         </p>
-        {isFullTest && result.toeic_score ? (
+        {isFullTest && result.toeic_score?.is_valid ? (
           <>
             <div className="result-summary-grid">
               <div className="result-metric result-metric-correct">
@@ -90,7 +90,7 @@ function TestReviewPage({ attemptId, go }) {
               </div>
               <div className="result-metric result-metric-total">
                 <span aria-hidden="true">⚑</span>
-                <small>Điểm TOEIC</small>
+                <small>Điểm TOEIC ước tính</small>
                 <b>{result.toeic_score.total_score}</b>
                 <small>/ 990</small>
               </div>
@@ -105,40 +105,53 @@ function TestReviewPage({ attemptId, go }) {
                     <b>{section}</b>
                     <strong>{score.score}<small> / 495</small></strong>
                   </div>
-                  <span>
-                    Trả lời đúng: {score.correct_count}/{score.scored_count}
-                  </span>
+                  <span>Trả lời đúng: {score.correct_count}/{score.scored_count}</span>
                 </div>
               ))}
             </div>
+            {/* <p className="result-score-method-note">
+              Điểm TOEIC ước tính · {result.toeic_score.scoring_version} · Không phải điểm TOEIC chính thức của ETS.
+            </p> */}
           </>
         ) : (
-          <div className="result-stats">
-            {result.toeic_score && (
-              <div>
-                <b>{result.toeic_score.total_score}</b>
-                <small>điểm TOEIC ước tính</small>
+          <>
+            {isFullTest && result.toeic_score && !result.toeic_score.is_valid && (
+              <div className="result-score-validation" role="alert">
+                <b>Không thể quy đổi điểm TOEIC ước tính</b>
+                <ul>
+                  {result.toeic_score.validation_errors.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
               </div>
             )}
-            <div>
-              <b>{result.part_scores.reduce((a, x) => a + x.correct_count, 0)}</b>
-              <small>câu đúng</small>
+            <div className="result-stats">
+              {!isFullTest && result.toeic_score?.is_valid && (
+                <div>
+                  <b>{result.toeic_score.total_score}</b>
+                  <small>điểm TOEIC ước tính</small>
+                </div>
+              )}
+              <div>
+                <b>{result.part_scores.reduce((a, x) => a + x.correct_count, 0)}</b>
+                <small>câu đúng</small>
+              </div>
+              <div>
+                <b>{result.part_scores.reduce((a, x) => a + x.scored_count, 0)}</b>
+                <small>câu có đáp án</small>
+              </div>
+              <div>
+                <b>
+                  {Math.round(
+                    result.part_scores.reduce((a, x) => a + x.score_percent, 0) /
+                      Math.max(1, result.part_scores.length),
+                  )}
+                  %
+                </b>
+                <small>độ chính xác</small>
+              </div>
             </div>
-            <div>
-              <b>{result.part_scores.reduce((a, x) => a + x.scored_count, 0)}</b>
-              <small>câu có đáp án</small>
-            </div>
-            <div>
-              <b>
-                {Math.round(
-                  result.part_scores.reduce((a, x) => a + x.score_percent, 0) /
-                    Math.max(1, result.part_scores.length),
-                )}
-                %
-              </b>
-              <small>độ chính xác</small>
-            </div>
-          </div>
+          </>
         )}
       </section>
       <div className="result-layout">

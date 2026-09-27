@@ -286,7 +286,7 @@ CREATE TABLE `assessments_testanswer` (`id` bigint AUTO_INCREMENT NOT NULL PRIMA
 --
 -- Create model TestAttempt
 --
-CREATE TABLE `assessments_testattempt` (`id` char(32) NOT NULL PRIMARY KEY, `mode` varchar(12) NOT NULL, `status` varchar(16) NOT NULL, `time_limit_seconds` integer UNSIGNED NULL CHECK (`time_limit_seconds` >= 0), `started_at` datetime(6) NOT NULL, `submitted_at` datetime(6) NULL, `last_activity_at` datetime(6) NOT NULL, `exam_id` bigint NOT NULL);
+CREATE TABLE `assessments_testattempt` (`id` char(32) NOT NULL PRIMARY KEY, `mode` varchar(12) NOT NULL, `status` varchar(16) NOT NULL, `time_limit_seconds` integer UNSIGNED NULL CHECK (`time_limit_seconds` >= 0), `started_at` datetime(6) NOT NULL, `submitted_at` datetime(6) NULL, `last_activity_at` datetime(6) NOT NULL, `exam_id` bigint NOT NULL, `scoring_version` varchar(32) NOT NULL DEFAULT 'TOEIC_ESTIMATE_V1');
 ALTER TABLE `assessments_attemptpart` ADD CONSTRAINT `assessments_attemptp_exam_part_id_87b2d743_fk_content_e` FOREIGN KEY (`exam_part_id`) REFERENCES `content_exampart` (`id`);
 ALTER TABLE `assessments_partscore` ADD CONSTRAINT `assessments_partscor_exam_part_id_9df6e132_fk_content_e` FOREIGN KEY (`exam_part_id`) REFERENCES `content_exampart` (`id`);
 ALTER TABLE `assessments_testanswer` ADD CONSTRAINT `assessments_testansw_question_id_d31e3a79_fk_content_q` FOREIGN KEY (`question_id`) REFERENCES `content_question` (`id`);

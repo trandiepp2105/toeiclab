@@ -135,8 +135,8 @@ function DashboardPage({ go, user }) {
 
       <section className="dashboard-bottom-grid">
         <article className="dashboard-card score-card">
-          <div className="score-card-top"><div><span className="card-kicker">TỔNG QUAN ĐIỂM SỐ</span><h2>{score.latest?.total_score || "—"} <small>/ {score.target}</small></h2></div>{score.latest && <span className="score-change"><ArrowIcon direction="up-right" /> Đã cập nhật</span>}</div>
-          <div className="score-progress"><div><span>Tiến độ mục tiêu</span><b>{score.target_progress}%</b></div><span className="score-progress-track"><i style={{ width: `${Math.min(score.target_progress, 100)}%` }} /></span><p>{score.latest ? `Còn thiếu ${Math.max(score.target - score.latest.total_score, 0)} điểm để đạt mục tiêu.` : "Hoàn thành một bài full test để xem điểm TOEIC ước tính."}</p></div>
+          <div className="score-card-top"><div><span className="card-kicker">TỔNG QUAN ĐIỂM SỐ</span><h2>{score.latest?.is_valid ? score.latest.total_score : "—"} <small>/ {score.target}</small></h2></div>{score.latest?.is_valid && <span className="score-change"><ArrowIcon direction="up-right" /> Đã cập nhật</span>}</div>
+          <div className="score-progress"><div><span>Tiến độ mục tiêu</span><b>{score.target_progress}%</b></div><span className="score-progress-track"><i style={{ width: `${Math.min(score.target_progress, 100)}%` }} /></span><p>{score.latest?.is_valid ? `Còn thiếu ${Math.max(score.target - score.latest.total_score, 0)} điểm để đạt mục tiêu.` : score.latest ? "Bài full test gần nhất chưa đủ dữ liệu để quy đổi điểm." : "Hoàn thành một bài full test để xem điểm TOEIC ước tính."}</p></div>
           <div className="score-breakdown"><span>Listening <b>{score.latest?.listening?.score || "—"}</b></span><span>Reading <b>{score.latest?.reading?.score || "—"}</b></span></div>
         </article>
 

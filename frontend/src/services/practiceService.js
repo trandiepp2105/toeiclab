@@ -10,10 +10,21 @@ const practiceService = {
     return getResponseData(apiClient.get("/content/practice/parts/"));
   },
 
-  /** Lấy toàn bộ câu hỏi của một Part, đã sắp xếp theo năm đề giảm dần. */
-  getPartQuestions(partNumber) {
+  /** Lấy cửa sổ câu hỏi quanh vị trí đã lưu hoặc trước/sau một cursor. */
+  getPartQuestions(partNumber, { cursor, direction = "around" } = {}) {
     return getResponseData(
-      apiClient.get(`/content/practice/parts/${partNumber}/questions/`),
+      apiClient.get(`/content/practice/parts/${partNumber}/questions/`, {
+        params: { ...(cursor ? { cursor } : {}), direction },
+      }),
+    );
+  },
+
+  /** Lưu câu hỏi đầu cụm tại đó người dùng dừng lại. */
+  savePartProgress(partNumber, questionId) {
+    return getResponseData(
+      apiClient.patch(`/content/practice/parts/${partNumber}/progress/`, {
+        question_id: questionId,
+      }),
     );
   },
 

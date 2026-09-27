@@ -7,7 +7,7 @@ from content.models import Exam, ExamPart, Question
 class TestAttempt(models.Model):
     id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False); user=models.ForeignKey(settings.AUTH_USER_MODEL,null=True,blank=True,on_delete=models.SET_NULL,related_name='test_attempts')
     exam=models.ForeignKey(Exam,on_delete=models.PROTECT); mode=models.CharField(max_length=12,default='full'); status=models.CharField(max_length=16,default='in_progress')
-    time_limit_seconds=models.PositiveIntegerField(null=True,blank=True); started_at=models.DateTimeField(auto_now_add=True); exam_started_at=models.DateTimeField(null=True,blank=True); submitted_at=models.DateTimeField(null=True,blank=True); last_activity_at=models.DateTimeField(auto_now=True); current_question_index=models.PositiveIntegerField(default=0)
+    time_limit_seconds=models.PositiveIntegerField(null=True,blank=True); started_at=models.DateTimeField(auto_now_add=True); exam_started_at=models.DateTimeField(null=True,blank=True); submitted_at=models.DateTimeField(null=True,blank=True); last_activity_at=models.DateTimeField(auto_now=True); current_question_index=models.PositiveIntegerField(default=0); scoring_version=models.CharField(max_length=32,default='TOEIC_ESTIMATE_V1')
 
 class AttemptPart(models.Model):
     attempt=models.ForeignKey(TestAttempt,on_delete=models.CASCADE,related_name='selected_parts'); exam_part=models.ForeignKey(ExamPart,on_delete=models.PROTECT); position=models.PositiveSmallIntegerField()

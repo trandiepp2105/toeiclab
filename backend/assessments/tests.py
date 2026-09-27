@@ -14,7 +14,12 @@ from .services import (
     submit_attempt,
     record_part_practice,
 )
-from .scoring import estimated_toeic_score,full_test_toeic_result
+from .scoring import (
+    DEFAULT_SCORING_VERSION,
+    LEGACY_SCORING_VERSION,
+    estimated_toeic_score,
+    full_test_toeic_result,
+)
 
 class AssessmentWorkflowTests(TestCase):
     def setUp(self):
@@ -157,11 +162,83 @@ class AssessmentWorkflowTests(TestCase):
 
     def test_full_test_returns_estimated_toeic_score(self):
         scores=[
-            SimpleNamespace(exam_part=SimpleNamespace(part_number=part),correct_count=10,scored_count=10)
-            for part in range(1,8)
+            SimpleNamespace(
+                exam_part=SimpleNamespace(part_number=part),
+                correct_count=question_count,
+                scored_count=question_count,
+            )
+            for part, question_count in {1: 6, 2: 25, 3: 39, 4: 30, 5: 30, 6: 16, 7: 54}.items()
         ]
         result=full_test_toeic_result(SimpleNamespace(mode='full'),scores)
 
         self.assertTrue(result['is_estimate'])
+        self.assertTrue(result['is_valid'])
         self.assertEqual(result['total_score'],990)
-        self.assertEqual(estimated_toeic_score(0,100),5)
+        self.assertEqual(result['scoring_version'], DEFAULT_SCORING_VERSION)
+        self.assertEqual(estimated_toeic_score(82, 'listening'), 410)
+        self.assertEqual(estimated_toeic_score(74, 'reading'), 370)
+        self.assertEqual(estimated_toeic_score(0, 'listening'), 5)
+        self.assertEqual(estimated_toeic_score(99, 'reading'), 495)
+        self.assertEqual(estimated_toeic_score(100, 'reading'), 495)
+
+        example_correct_counts = {1: 5, 2: 21, 3: 31, 4: 25, 5: 23, 6: 12, 7: 39}
+        example_scores = [
+            SimpleNamespace(
+                exam_part=SimpleNamespace(part_number=part),
+                correct_count=example_correct_counts[part],
+                scored_count=question_count,
+            )
+            for part, question_count in {1: 6, 2: 25, 3: 39, 4: 30, 5: 30, 6: 16, 7: 54}.items()
+        ]
+        example_result = full_test_toeic_result(SimpleNamespace(mode='full'), example_scores)
+        self.assertEqual(example_result['listening']['correct_count'], 82)
+        self.assertEqual(example_result['listening']['score'], 410)
+        self.assertEqual(example_result['reading']['correct_count'], 74)
+        self.assertEqual(example_result['reading']['score'], 370)
+        self.assertEqual(example_result['total_score'], 780)
+
+    def test_full_conversion_table_returns_values_for_every_raw_score(self):
+        for raw_score in range(101):
+            expected = 5 if raw_score == 0 else min(raw_score * 5, 495)
+            with self.subTest(raw_score=raw_score):
+                self.assertEqual(estimated_toeic_score(raw_score, 'listening'), expected)
+                self.assertEqual(estimated_toeic_score(raw_score, 'reading'), expected)
+
+    def test_full_test_rejects_incomplete_part_counts_instead_of_scaling(self):
+        scores = [
+            SimpleNamespace(
+                exam_part=SimpleNamespace(part_number=part),
+                correct_count=count - int(part == 5),
+                scored_count=count - int(part == 5),
+            )
+            for part, count in {1: 6, 2: 25, 3: 39, 4: 30, 5: 30, 6: 16, 7: 54}.items()
+        ]
+
+        result = full_test_toeic_result(SimpleNamespace(mode='full'), scores)
+
+        self.assertFalse(result['is_valid'])
+        self.assertFalse(result['is_estimate'])
+        self.assertIsNone(result.get('total_score'))
+        self.assertTrue(any('Part 5 contains 29' in message for message in result['validation_errors']))
+
+    def test_estimated_toeic_score_rejects_raw_values_outside_full_section_range(self):
+        with self.assertRaises(ValueError):
+            estimated_toeic_score(101, 'listening')
+
+    def test_legacy_attempt_keeps_its_original_conversion(self):
+        scores = [
+            SimpleNamespace(
+                exam_part=SimpleNamespace(part_number=part),
+                correct_count=80,
+                scored_count=100,
+            )
+            for part in range(1, 8)
+        ]
+        attempt = SimpleNamespace(mode='full', scoring_version=LEGACY_SCORING_VERSION)
+
+        result = full_test_toeic_result(attempt, scores)
+
+        self.assertEqual(result['scoring_version'], LEGACY_SCORING_VERSION)
+        self.assertEqual(result['listening']['score'], 397)
+        self.assertEqual(result['reading']['score'], 397)
+        self.assertEqual(result['total_score'], 794)

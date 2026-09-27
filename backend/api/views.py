@@ -1,4 +1,5 @@
 """Thin HTTP controllers for TOEIC Lab APIs."""
+import logging
 import re, secrets
 import smtplib
 from datetime import timedelta
@@ -11,6 +12,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import BooleanField, Count, Exists, F, OuterRef, Q, Sum, Value
+from django.db.models.functions import Coalesce
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -24,7 +26,7 @@ from users.services import verify_google_credential, get_or_create_google_user
 from users.email_templates import registration_otp_email, password_reset_otp_email
 from content.models import Exam, ExamPart, Direction, Question, QuestionOption
 from vocabulary.models import VocabularyTopic, VocabularyTerm, TopicTerm
-from learning.models import VocabularyProgress, VocabularyQuizAttempt, VocabularyQuizAnswer
+from learning.models import VocabularyProgress, VocabularyQuizAttempt, VocabularyQuizAnswer, PartPracticeProgress
 from learning.services import create_quiz, answer_quiz, submit_quiz, calculate_study_streak
 from assessments.models import TestAttempt, TestAnswer
 from assessments.services import (
@@ -45,6 +47,9 @@ from assessments.serializers import (
 )
 from content.serializers import PracticeCheckSerializer
 from learning.serializers import CreateQuizSerializer,AnswerQuizSerializer
+from core.observability import log_event
+
+logger = logging.getLogger(__name__)
 
 User=get_user_model()
 PART_NAMES={1:'Photographs',2:'Question-Response',3:'Conversations',4:'Talks',5:'Incomplete Sentences',6:'Text Completion',7:'Reading Comprehension'}
@@ -124,10 +129,16 @@ def csrf(request):return Response({'csrfToken':get_token(request)})
 @permission_classes([AllowAny])
 def register_request_otp(request):
     payload=RegisterOtpRequestSerializer(data=request.data)
-    if not payload.is_valid():return Response(payload.errors,status=400)
+    if not payload.is_valid():
+        log_event(logger, logging.WARNING, 'otp_send_failed', service='auth', error_code='invalid_request', status_code=400)
+        return Response(payload.errors,status=400)
     email=payload.validated_data['email'];password=payload.validated_data['password']
-    if User.objects.filter(email__iexact=email).exists():return error('Email đã đăng ký.',409)
-    if OtpChallenge.objects.filter(email=email,purpose='register',sent_at__gt=timezone.now()-timedelta(seconds=60)).exists():return error('Chờ 60 giây trước khi gửi lại OTP.',429)
+    if User.objects.filter(email__iexact=email).exists():
+        log_event(logger, logging.WARNING, 'otp_send_failed', service='auth', error_code='account_exists', status_code=409)
+        return error('Email đã đăng ký.',409)
+    if OtpChallenge.objects.filter(email=email,purpose='register',sent_at__gt=timezone.now()-timedelta(seconds=60)).exists():
+        log_event(logger, logging.WARNING, 'otp_send_failed', service='auth', error_code='rate_limited', status_code=429)
+        return error('Chờ 60 giây trước khi gửi lại OTP.',429)
     code=f'{secrets.randbelow(1000000):06d}'
     OtpChallenge.objects.create(
         email=email,
@@ -138,13 +149,13 @@ def register_request_otp(request):
         expires_at=timezone.now()+timedelta(minutes=10),
     )
     subject, text_body, html_body = registration_otp_email(code)
-    send_mail(
-        subject,
-        text_body,
-        settings.DEFAULT_FROM_EMAIL,
-        [email],
-        html_message=html_body,
-    )
+    try:
+        send_mail(subject, text_body, settings.DEFAULT_FROM_EMAIL, [email], html_message=html_body)
+    except (OSError, smtplib.SMTPException):
+        OtpChallenge.objects.filter(email=email, purpose='register', verified_at__isnull=True).delete()
+        log_event(logger, logging.ERROR, 'otp_delivery_failed', service='email', error_code='email_delivery_failed', exc_info=True)
+        return error('Không gửi được email lúc này. Vui lòng thử lại sau.', 503)
+    log_event(logger, logging.INFO, 'otp_sent', service='auth')
     result={'message':'Đã gửi mã OTP.'}
     if settings.DEBUG:result['development_otp']=code
     return Response(result)
@@ -152,11 +163,17 @@ def register_request_otp(request):
 @permission_classes([AllowAny])
 def register_verify(request):
     payload=RegisterOtpVerifySerializer(data=request.data)
-    if not payload.is_valid():return Response(payload.errors,status=400)
+    if not payload.is_valid():
+        log_event(logger, logging.WARNING, 'otp_verification_failed', service='auth', error_code='invalid_request', status_code=400)
+        return Response(payload.errors,status=400)
     email=payload.validated_data['email'];code=payload.validated_data['otp'];challenge=OtpChallenge.objects.filter(email=email,purpose='register',verified_at__isnull=True).order_by('-sent_at').first()
-    if not challenge or challenge.expires_at<timezone.now() or challenge.attempts>=5:return error('OTP hết hạn hoặc không hợp lệ.')
+    if not challenge or challenge.expires_at<timezone.now() or challenge.attempts>=5:
+        log_event(logger, logging.WARNING, 'otp_verification_failed', service='auth', error_code='otp_expired_or_unavailable', status_code=400)
+        return error('OTP hết hạn hoặc không hợp lệ.')
     challenge.attempts+=1;challenge.save(update_fields=['attempts'])
-    if not check_password(code,challenge.code_hash):return error('OTP không chính xác.')
+    if not check_password(code,challenge.code_hash):
+        log_event(logger, logging.WARNING, 'otp_verification_failed', service='auth', error_code='otp_invalid', status_code=400)
+        return error('OTP không chính xác.')
     user=User.objects.create_user(
         email=email,
         password=None,
@@ -166,29 +183,44 @@ def register_verify(request):
     user.password = challenge.password_hash
     user.save(update_fields=['password', 'email_verified'])
     challenge.verified_at=timezone.now();challenge.save(update_fields=['verified_at'])
+    log_event(logger, logging.INFO, 'registration_completed', service='auth', user_id=user.pk)
     return Response({**token_pair(user),'user':user_json(user)},status=201)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
     payload=LoginSerializer(data=request.data)
-    if not payload.is_valid():return Response(payload.errors,status=400)
+    if not payload.is_valid():
+        log_event(logger, logging.WARNING, 'login_failed', service='auth', error_code='invalid_request', status_code=400)
+        return Response(payload.errors,status=400)
     email=payload.validated_data['email']
     password=payload.validated_data['password']
     if not User.objects.filter(email__iexact=email).exists():
+        log_event(logger, logging.WARNING, 'login_failed', service='auth', error_code='account_not_found', status_code=404)
         return error('Tài khoản không tồn tại. Vui lòng đăng ký.',404)
     user=authenticate(request,email=email,password=password)
-    if not user:return error('Email hoặc mật khẩu không đúng.')
-    if not user.email_verified:return error('Email chưa được xác minh OTP.',403)
+    if not user:
+        log_event(logger, logging.WARNING, 'login_failed', service='auth', error_code='invalid_credentials', status_code=400)
+        return error('Email hoặc mật khẩu không đúng.')
+    if not user.email_verified:
+        log_event(logger, logging.WARNING, 'login_failed', service='auth', error_code='email_not_verified', status_code=403)
+        return error('Email chưa được xác minh OTP.',403)
+    log_event(logger, logging.INFO, 'login_succeeded', service='auth', user_id=user.pk)
     return Response({**token_pair(user),'user':user_json(user)})
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def google_login(request):
     payload=GoogleCredentialSerializer(data=request.data)
-    if not payload.is_valid():return Response(payload.errors,status=400)
+    if not payload.is_valid():
+        log_event(logger, logging.WARNING, 'google_sign_in_failed', service='auth', error_code='invalid_request', status_code=400)
+        return Response(payload.errors,status=400)
     try:
         claims=verify_google_credential(payload.validated_data['credential'])
         user=get_or_create_google_user(claims)
-    except ValueError as exc:return error(exc,503 if 'chưa được cấu hình' in str(exc) else 400)
+    except ValueError as exc:
+        status = 503 if 'chưa được cấu hình' in str(exc) else 400
+        log_event(logger, logging.WARNING, 'google_sign_in_failed', service='auth', error_code='credential_verification_failed', status_code=status)
+        return error(exc,status)
+    log_event(logger, logging.INFO, 'google_sign_in_succeeded', service='auth', user_id=user.pk)
     return Response({**token_pair(user),'user':user_json(user)})
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -202,9 +234,13 @@ def refresh_session(request):
     """Exchange a valid refresh JWT for a new access JWT."""
     payload=TokenRefreshSerializer(data=request.data)
     try:
-        if not payload.is_valid():return Response(payload.errors,status=401)
+        if not payload.is_valid():
+            log_event(logger, logging.WARNING, 'refresh_token_failed', service='auth', error_code='invalid_refresh_token', status_code=401)
+            return Response(payload.errors,status=401)
     except User.DoesNotExist:
+        log_event(logger, logging.WARNING, 'refresh_token_failed', service='auth', error_code='user_not_found', status_code=401)
         return error('Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại.',401)
+    log_event(logger, logging.INFO, 'refresh_token_succeeded', service='auth')
     return Response(payload.validated_data)
 @api_view(['GET','PATCH'])
 def me(request):
@@ -217,9 +253,14 @@ def change_password(request):
     payload=ChangePasswordSerializer(data=request.data)
     if not payload.is_valid():return Response(payload.errors,status=400)
     current=payload.validated_data['current_password'];new=payload.validated_data['new_password']
-    if not request.user.check_password(current):return error('Mật khẩu hiện tại không chính xác.',400)
-    if len(new)<8:return error('Mật khẩu mới cần tối thiểu 8 ký tự.',400)
+    if not request.user.check_password(current):
+        log_event(logger, logging.WARNING, 'password_change_failed', service='auth', user_id=request.user.pk, error_code='current_password_invalid', status_code=400)
+        return error('Mật khẩu hiện tại không chính xác.',400)
+    if len(new)<8:
+        log_event(logger, logging.WARNING, 'password_change_failed', service='auth', user_id=request.user.pk, error_code='password_too_short', status_code=400)
+        return error('Mật khẩu mới cần tối thiểu 8 ký tự.',400)
     request.user.set_password(new);request.user.save(update_fields=['password'])
+    log_event(logger, logging.INFO, 'password_changed', service='auth', user_id=request.user.pk)
     return Response({'message':'Đã cập nhật mật khẩu.'})
 
 
@@ -229,6 +270,7 @@ def password_reset_request_otp(request):
     """Send a reset OTP without revealing whether an email has an account."""
     payload = PasswordResetRequestSerializer(data=request.data)
     if not payload.is_valid():
+        log_event(logger, logging.WARNING, 'password_reset_otp_failed', service='auth', error_code='invalid_request', status_code=400)
         return Response(payload.errors, status=400)
 
     email = payload.validated_data['email']
@@ -238,6 +280,7 @@ def password_reset_request_otp(request):
         sent_at__gt=timezone.now() - timedelta(seconds=60),
     ).exists()
     if recent_challenge:
+        log_event(logger, logging.WARNING, 'password_reset_otp_failed', service='auth', error_code='rate_limited', status_code=429)
         return error('Vui lòng chờ 60 giây trước khi yêu cầu mã mới.', 429)
 
     # Identical response for unknown addresses prevents account enumeration.
@@ -258,8 +301,10 @@ def password_reset_request_otp(request):
         send_mail(subject, text_body, settings.DEFAULT_FROM_EMAIL, [user.email], html_message=html_body)
     except (OSError, smtplib.SMTPException):
         challenge.delete()
+        log_event(logger, logging.ERROR, 'otp_delivery_failed', service='email', error_code='email_delivery_failed', user_id=user.pk, exc_info=True)
         return error('Không gửi được email lúc này. Vui lòng thử lại sau.', 503)
 
+    log_event(logger, logging.INFO, 'password_reset_otp_sent', service='auth', user_id=user.pk)
     return Response({'message': 'Nếu email đã đăng ký, hướng dẫn xác nhận sẽ được gửi tới hộp thư.'})
 
 
@@ -269,6 +314,7 @@ def password_reset_verify_otp(request):
     """Verify an OTP and issue a signed token for one password update."""
     payload = PasswordResetVerifySerializer(data=request.data)
     if not payload.is_valid():
+        log_event(logger, logging.WARNING, 'otp_verification_failed', service='auth', error_code='invalid_request', status_code=400)
         return Response(payload.errors, status=400)
 
     email = payload.validated_data['email']
@@ -282,11 +328,13 @@ def password_reset_verify_otp(request):
         or challenge.expires_at <= timezone.now()
         or challenge.attempts >= 5
     ):
+        log_event(logger, logging.WARNING, 'otp_verification_failed', service='auth', error_code='otp_expired_or_unavailable', status_code=400)
         return error('Mã OTP đã hết hạn hoặc không hợp lệ.')
 
     challenge.attempts += 1
     challenge.save(update_fields=['attempts'])
     if not check_password(payload.validated_data['otp'], challenge.code_hash):
+        log_event(logger, logging.WARNING, 'otp_verification_failed', service='auth', error_code='otp_invalid', status_code=400)
         return error('Mã OTP không chính xác.')
 
     challenge.verified_at = timezone.now()
@@ -295,6 +343,7 @@ def password_reset_verify_otp(request):
         {'challenge_id': challenge.pk, 'email': challenge.email},
         salt='toeiclab.password-reset',
     )
+    log_event(logger, logging.INFO, 'password_reset_otp_verified', service='auth')
     return Response({'reset_token': reset_token})
 
 
@@ -314,8 +363,10 @@ def password_reset_complete(request):
             max_age=600,
         )
     except signing.SignatureExpired:
+        log_event(logger, logging.WARNING, 'password_reset_failed', service='auth', error_code='reset_token_expired', status_code=400)
         return error('Phiên xác nhận đã hết hạn. Vui lòng yêu cầu mã OTP mới.')
     except signing.BadSignature:
+        log_event(logger, logging.WARNING, 'password_reset_failed', service='auth', error_code='reset_token_invalid', status_code=400)
         return error('Yêu cầu đổi mật khẩu không hợp lệ. Vui lòng xác nhận OTP lại.')
 
     challenge = OtpChallenge.objects.select_for_update().filter(
@@ -328,6 +379,7 @@ def password_reset_complete(request):
         or challenge.verified_at is None
         or challenge.verified_at < timezone.now() - timedelta(minutes=10)
     ):
+        log_event(logger, logging.WARNING, 'password_reset_failed', service='auth', error_code='challenge_expired_or_used', status_code=400)
         return error('Yêu cầu đổi mật khẩu đã hết hạn hoặc đã được sử dụng.')
 
     user = User.objects.filter(email__iexact=challenge.email).first()
@@ -345,6 +397,7 @@ def password_reset_complete(request):
     user.save(update_fields=['password'])
     # Deleting the verified challenge makes the signed token single-use.
     challenge.delete()
+    log_event(logger, logging.INFO, 'password_reset_completed', service='auth', user_id=user.pk)
     return Response({'message': 'Mật khẩu đã được đổi thành công.'})
 
 @api_view(['GET'])
@@ -503,26 +556,98 @@ def practice_part_list(request):
     ])
 
 
+PRACTICE_WINDOW_GROUPS = 6
+PRACTICE_ORDER = ('practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk')
+
+
+def practice_cursor_filter(cursor, *, after):
+    """Build a stable keyset condition matching the practice question ordering."""
+    values = [cursor.practice_year, cursor.exam_part.exam.title, cursor.exam_part.exam_id, cursor.number, cursor.pk]
+    condition = Q()
+    for index, (field, value) in enumerate(zip(PRACTICE_ORDER, values)):
+        # Year sorts descending; the remaining cursor fields sort ascending.
+        use_greater = not after if field == 'practice_year' else after
+        lookup = 'gt' if use_greater else 'lt'
+        clause = Q(**{f'{field}__{lookup}': value})
+        for previous_field, previous_value in zip(PRACTICE_ORDER[:index], values[:index]):
+            clause &= Q(**{previous_field: previous_value})
+        condition |= clause
+    return condition
+
+
+def practice_group_filter(question, part_number):
+    """Return a query matching every question in the same navigation group."""
+    exam_part_id = question.exam_part_id
+    if part_number in PRACTICE_SINGLE_PARTS:
+        return Q(pk=question.pk)
+    if part_number in (3, 4) and question.prompt:
+        return Q(exam_part_id=exam_part_id, prompt=question.prompt)
+    if question.passage_id:
+        return Q(exam_part_id=exam_part_id, passage_id=question.passage_id)
+    return Q(pk=question.pk)
+
+
 @api_view(['GET'])
 def practice_part_questions(request, part_number):
-    """Return all questions for a Part, newest exam year first."""
+    """Return a bounded question window and the authenticated user's saved cursor."""
     if not request.user.is_authenticated:
         return error('Đăng nhập để luyện tập từng Part.', 401)
     if part_number not in range(1, 8):
         return error('Part không hợp lệ.', 404)
-    questions = Question.objects.filter(
-        exam_part__part_number=part_number,
-    ).select_related(
+    base = Question.objects.filter(exam_part__part_number=part_number).annotate(
+        practice_year=Coalesce('exam_part__exam__year', Value(0)),
+    )
+    progress = PartPracticeProgress.objects.filter(
+        user=request.user, part_number=part_number,
+    ).only('last_question_id').first()
+    direction = request.query_params.get('direction', 'around')
+    cursor_id = request.query_params.get('cursor')
+    cursor = None
+    if cursor_id:
+        cursor = base.select_related('exam_part__exam').filter(pk=cursor_id).first()
+        if cursor is None:
+            return error('Vị trí câu hỏi không hợp lệ.', 400)
+    elif direction != 'first' and progress and progress.last_question_id:
+        cursor = base.select_related('exam_part__exam').filter(pk=progress.last_question_id).first()
+    if direction not in {'around', 'next', 'previous', 'first'}:
+        return error('Hướng tải câu hỏi không hợp lệ.', 400)
+    if direction == 'first':
+        cursor = None
+    elif cursor is None and progress and progress.last_question_id:
+        cursor = base.select_related('exam_part__exam').filter(pk=progress.last_question_id).first()
+    reverse_window = direction == 'previous'
+    if cursor is None:
+        candidates = base.order_by('-practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk')[:PRACTICE_WINDOW_GROUPS * 12]
+    else:
+        condition = practice_cursor_filter(cursor, after=direction != 'previous')
+        if direction == 'around':
+            condition |= Q(pk=cursor.pk)
+        candidates = base.filter(condition).order_by(
+            *(['practice_year', '-exam_part__exam__title', '-exam_part__exam_id', '-number', '-pk'] if reverse_window else ['-practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk'])
+        )[:PRACTICE_WINDOW_GROUPS * 12]
+    candidate_rows = list(candidates.select_related('exam_part__exam', 'passage').prefetch_related('options'))
+    if reverse_window:
+        candidate_rows.reverse()
+    selected_groups = []
+    selected_keys = set()
+    for question in candidate_rows:
+        key = practice_group_key(question, part_number)
+        if key not in selected_keys:
+            selected_groups.append((key, question))
+            selected_keys.add(key)
+            if len(selected_groups) == PRACTICE_WINDOW_GROUPS:
+                break
+    group_query = Q(pk__in=[])
+    for _, representative in selected_groups:
+        group_query |= practice_group_filter(representative, part_number)
+    window_questions = list(base.filter(group_query).select_related(
         'exam_part__exam', 'passage',
     ).prefetch_related('options').order_by(
-        '-exam_part__exam__year',
-        'exam_part__exam__title',
-        'exam_part__exam_id',
-        'number',
-    )
+        '-practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk',
+    ))
     groups = []
     by_key = {}
-    for question in questions:
+    for question in window_questions:
         key = practice_group_key(question, part_number)
         group = by_key.get(key)
         if group is None:
@@ -539,13 +664,41 @@ def practice_part_questions(request, part_number):
             by_key[key] = group
             groups.append(group)
         group['questions'].append(practice_questions_json(question, part_number))
+    first_question = window_questions[0] if window_questions else None
+    question_offset = (
+        base.filter(practice_cursor_filter(first_question, after=False)).count()
+        if first_question else 0
+    )
     return Response({
         'part_number': part_number,
         'name': PART_NAMES.get(part_number),
         'practice_mode': 'single' if part_number in PRACTICE_SINGLE_PARTS else 'group',
         'groups': groups,
-        'total_questions': sum(len(group['questions']) for group in groups),
+        'total_questions': base.count(),
+        'question_offset': question_offset,
+        'start_cursor': first_question.pk if first_question else None,
+        'end_cursor': window_questions[-1].pk if window_questions else None,
+        'has_previous': question_offset > 0,
+        'has_next': bool(window_questions) and question_offset + len(window_questions) < base.count(),
+        'saved_question_id': progress.last_question_id if progress else None,
     })
+
+
+@api_view(['PATCH'])
+def practice_part_progress(request, part_number):
+    """Persist the current group cursor for the authenticated learner."""
+    if not request.user.is_authenticated:
+        return error('Đăng nhập để lưu tiến độ luyện tập.', 401)
+    if part_number not in range(1, 8):
+        return error('Part không hợp lệ.', 404)
+    question_id = request.data.get('question_id')
+    question = Question.objects.filter(pk=question_id, exam_part__part_number=part_number).first()
+    if not question:
+        return error('Vị trí câu hỏi không hợp lệ.', 400)
+    progress, _ = PartPracticeProgress.objects.get_or_create(user=request.user, part_number=part_number)
+    progress.last_question = question
+    progress.save(update_fields=['last_question', 'updated_at'])
+    return Response({'part_number': part_number, 'question_id': question.pk})
 
 
 @api_view(['POST'])
@@ -562,8 +715,10 @@ def practice_check_answers(request):
     ).select_related('exam_part').prefetch_related('options')
     question_map = {str(question.pk): question for question in questions}
     if len(question_map) != len(answer_map):
+        log_event(logger, logging.WARNING, 'part_answer_check_failed', service='assessment', user_id=request.user.pk, error_code='question_not_found', status_code=400)
         return error('Một hoặc nhiều câu hỏi không tồn tại.', 400)
     if len({question.exam_part_id for question in question_map.values()}) != 1:
+        log_event(logger, logging.WARNING, 'part_answer_check_failed', service='assessment', user_id=request.user.pk, error_code='mixed_parts', status_code=400)
         return error('Một lượt luyện chỉ được chứa câu hỏi trong cùng một Part.', 400)
 
     checked = []
@@ -574,6 +729,7 @@ def practice_check_answers(request):
             option_key=selected,
         ).exists()
         if not valid_option:
+            log_event(logger, logging.WARNING, 'part_answer_check_failed', service='assessment', user_id=request.user.pk, error_code='invalid_answer_option', status_code=400, part_number=question.exam_part.part_number)
             return error(f'Đáp án {selected} không hợp lệ cho câu {question.number}.', 400)
         checked.append({
             'question_id': question.pk,
@@ -597,6 +753,7 @@ def practice_check_answers(request):
             selected_answers=answer_map,
         )
     except ValueError as exc:
+        log_event(logger, logging.WARNING, 'part_answer_check_failed', service='assessment', user_id=request.user.pk, error_code='answer_check_rejected', status_code=400)
         return error(exc, 400)
 
     return Response({'checked': checked})
@@ -730,7 +887,7 @@ def dashboard_summary(request):
             'latest': latest_score,
             'target': 900,
             'target_progress': round(latest_score['total_score'] / 900 * 100)
-            if latest_score else 0,
+            if latest_score and latest_score.get('is_valid') else 0,
         },
         'recommendations': [
             {
@@ -808,7 +965,10 @@ def quiz_create(request):
     payload=CreateQuizSerializer(data=request.data)
     if not payload.is_valid():return Response(payload.errors,status=400)
     try:attempt=create_quiz(user=request.user,**payload.validated_data)
-    except (ValueError,TypeError) as exc:return error(exc)
+    except (ValueError,TypeError):
+        log_event(logger, logging.WARNING, 'vocabulary_quiz_creation_failed', service='learning', user_id=request.user.pk, error_code='invalid_quiz_configuration', status_code=400)
+        return error('Không thể tạo quiz với cấu hình này.')
+    log_event(logger, logging.INFO, 'vocabulary_quiz_created', service='learning', user_id=request.user.pk, resource_id=attempt.pk)
     return Response(quiz_json(attempt),status=201)
 def get_quiz(request,attempt_id):return VocabularyQuizAttempt.objects.filter(pk=attempt_id,user=request.user).first()
 @api_view(['GET'])
@@ -824,17 +984,29 @@ def quiz_answer(request,attempt_id):
     if not attempt:return error('Không tìm thấy quiz.',404)
     payload=AnswerQuizSerializer(data=request.data)
     if not payload.is_valid():return Response(payload.errors,status=400)
+    was_submitted = attempt.status == 'submitted'
     try:row=answer_quiz(attempt=attempt,user=request.user,position=payload.validated_data['position'],selected=payload.validated_data['selected_value'])
-    except PermissionError as exc:return error(exc,403)
-    except (KeyError,ValueError) as exc:return error(exc)
+    except PermissionError:
+        log_event(logger, logging.WARNING, 'vocabulary_quiz_answer_failed', service='learning', user_id=request.user.pk, resource_id=attempt.pk, error_code='quiz_not_writable', status_code=403)
+        return error('Quiz không thể nhận câu trả lời.',403)
+    except (KeyError,ValueError):
+        log_event(logger, logging.WARNING, 'vocabulary_quiz_answer_failed', service='learning', user_id=request.user.pk, resource_id=attempt.pk, error_code='invalid_answer_position', status_code=400)
+        return error('Câu trả lời không hợp lệ.')
+    if not was_submitted and row.attempt.status == 'submitted':
+        log_event(logger, logging.INFO, 'vocabulary_quiz_submitted', service='learning', user_id=request.user.pk, resource_id=attempt.pk)
     return Response({'position':row.position,'selected_value':row.selected_value,'is_correct':row.is_correct,'correct_value':row.correct_value,'status':row.attempt.status,'correct_count':row.attempt.correct_count,'question_count':row.attempt.question_count,'answered_count':row.attempt.answers.filter(answered_at__isnull=False).count()})
 @api_view(['POST'])
 def quiz_submit(request,attempt_id):
     if not request.user.is_authenticated:return error('Đăng nhập để nộp quiz.',401)
     attempt=get_quiz(request,attempt_id)
     if not attempt:return error('Không tìm thấy quiz.',404)
+    was_submitted = attempt.status == 'submitted'
     try:attempt=submit_quiz(attempt=attempt,user=request.user)
-    except PermissionError as exc:return error(exc,403)
+    except PermissionError:
+        log_event(logger, logging.WARNING, 'vocabulary_quiz_submission_failed', service='learning', user_id=request.user.pk, resource_id=attempt.pk, error_code='quiz_not_submittable', status_code=403)
+        return error('Quiz không thể nộp.',403)
+    if not was_submitted and attempt.status == 'submitted':
+        log_event(logger, logging.INFO, 'vocabulary_quiz_submitted', service='learning', user_id=request.user.pk, resource_id=attempt.pk)
     return Response(quiz_json(attempt,True))
 @api_view(['GET'])
 def quiz_result(request,attempt_id):return quiz_detail(request,attempt_id)
@@ -904,6 +1076,7 @@ def attempt_create(request):
     try:attempt=start_attempt(user=request.user,**payload.validated_data)
     except ActiveFullTestExists as exc:
         attempt = exc.attempt
+        log_event(logger, logging.WARNING, 'test_attempt_creation_failed', service='assessment', user_id=request.user.pk, resource_id=attempt.pk, error_code='active_full_test_exists', status_code=409)
         return Response(
             {
                 'code': 'active_full_test_exists',
@@ -922,7 +1095,10 @@ def attempt_create(request):
             },
             status=409,
         )
-    except (ValueError,TypeError,Exam.DoesNotExist) as exc:return error(exc)
+    except (ValueError,TypeError,Exam.DoesNotExist):
+        log_event(logger, logging.WARNING, 'test_attempt_creation_failed', service='assessment', user_id=request.user.pk, error_code='invalid_attempt_request', status_code=400)
+        return error('Không thể tạo lượt thi với yêu cầu này.')
+    log_event(logger, logging.INFO, 'test_attempt_created', service='assessment', user_id=request.user.pk, resource_id=attempt.pk)
     return Response(attempt_json(attempt),status=201)
 @api_view(['GET'])
 def attempt_detail(request,attempt_id):
@@ -949,6 +1125,7 @@ def attempt_start(request,attempt_id):
     if attempt.exam_started_at is None:
         attempt.exam_started_at = timezone.now()
         attempt.save(update_fields=['exam_started_at', 'last_activity_at'])
+        log_event(logger, logging.INFO, 'test_attempt_started', service='assessment', user_id=request.user.pk, resource_id=attempt.pk)
     return Response(attempt_json(attempt))
 
 
@@ -972,8 +1149,10 @@ def attempt_progress(request, attempt_id):
             **payload.validated_data,
         )
     except PermissionError as exc:
+        log_event(logger, logging.WARNING, 'test_attempt_progress_save_failed', service='assessment', user_id=request.user.pk, resource_id=attempt.pk, error_code='progress_forbidden', status_code=403)
         return error(exc, 403)
     except ValueError as exc:
+        log_event(logger, logging.ERROR, 'test_attempt_progress_save_failed', service='assessment', user_id=request.user.pk, resource_id=attempt.pk, error_code='progress_save_rejected', status_code=409)
         return error(exc, 409)
 
     return Response({'current_question_index': attempt.current_question_index})
@@ -987,7 +1166,9 @@ def attempt_answers(request,attempt_id):
     if not payload.is_valid():return Response(payload.errors,status=400)
     values=payload.validated_data['answers']
     try:save_answers(attempt=attempt,user=request.user,answers=values)
-    except (ValueError,TypeError) as exc:return error(exc)
+    except (ValueError,TypeError):
+        log_event(logger, logging.ERROR, 'test_attempt_answers_save_failed', service='assessment', user_id=request.user.pk, resource_id=attempt.pk, error_code='answers_save_failed', status_code=400)
+        return error('Không thể lưu câu trả lời.')
     if payload.validated_data['check']:
         rows=TestAnswer.objects.filter(attempt=attempt,question_id__in=values.keys()).select_related('question')
         return Response({'saved':len(values),'checked':[{'question_id':x.question_id,'selected_answer':x.selected_option,'correct_answer':x.question.correct_option,'is_correct':bool(x.question.correct_option and x.selected_option==x.question.correct_option),'explanation':{'reason':x.question.explanation_reason,'tip':x.question.explanation_tip}} for x in rows]})
@@ -998,9 +1179,16 @@ def attempt_submit(request,attempt_id):
         return error('Đăng nhập để nộp bài thi.', 401)
     attempt=get_attempt(request,attempt_id)
     if not attempt:return error('Không tìm thấy bài thi.',404)
+    was_submitted = attempt.status == 'submitted'
     try:attempt=submit_attempt(attempt_id=attempt_id,user=request.user)
-    except PermissionError as exc:return error(exc,403)
-    except ValueError as exc:return error(exc,409)
+    except PermissionError:
+        log_event(logger, logging.WARNING, 'test_attempt_submission_failed', service='assessment', user_id=request.user.pk, resource_id=attempt.pk, error_code='submission_forbidden', status_code=403)
+        return error('Không thể nộp lượt thi.',403)
+    except ValueError:
+        log_event(logger, logging.WARNING, 'test_attempt_submission_failed', service='assessment', user_id=request.user.pk, resource_id=attempt.pk, error_code='submission_rejected', status_code=409)
+        return error('Lượt thi không thể nộp ở trạng thái hiện tại.',409)
+    if not was_submitted:
+        log_event(logger, logging.INFO, 'test_attempt_submitted', service='assessment', user_id=request.user.pk, resource_id=attempt.pk)
     return Response({'attempt':attempt_json(attempt,True),**part_score_json(attempt)})
 @api_view(['POST'])
 def attempt_abandon(request,attempt_id):
@@ -1011,6 +1199,7 @@ def attempt_abandon(request,attempt_id):
     if attempt.status=='in_progress':
         attempt.status='abandoned'
         attempt.save(update_fields=['status', 'last_activity_at'])
+        log_event(logger, logging.INFO, 'test_attempt_abandoned', service='assessment', user_id=request.user.pk, resource_id=attempt.pk)
     return Response({'status':attempt.status})
 @api_view(['GET'])
 def attempt_result(request,attempt_id):return attempt_review(request,attempt_id)

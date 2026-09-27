@@ -38,6 +38,38 @@ import AccountPage from "./pages/AccountPage/AccountPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage/ChangePasswordPage";
 import NotFoundPage from "./pages/NotFoundPage/NotFoundPage";
 
+/** Chọn tiêu đề tab trình duyệt theo trang hiện tại. */
+function getPageTitle(pathname) {
+  const path = pathname.replace(/\/$/, "") || "/";
+  const exactTitles = {
+    "/": "Thống kê kết quả luyện tập",
+    "/vocabulary": "Từ vựng TOEIC",
+    "/vocabulary/topics": "Chủ đề từ vựng",
+    "/vocabulary/quiz": "Thiết lập kiểm tra từ vựng",
+    "/tests": "Danh sách đề thi",
+    "/parts": "Luyện tập theo Part",
+    "/history": "Lịch sử làm bài",
+    "/grammar": "Ngữ pháp TOEIC",
+    "/tips": "Mẹo làm bài TOEIC",
+    "/account": "Tài khoản",
+    "/account/change-password": "Đổi mật khẩu",
+  };
+
+  if (exactTitles[path]) return exactTitles[path];
+  if (/^\/vocabulary\/topics\/[^/]+$/.test(path)) return "Chi tiết chủ đề từ vựng";
+  if (/^\/vocabulary\/quiz\/[^/]+\/result$/.test(path)) return "Kết quả kiểm tra từ vựng";
+  if (/^\/vocabulary\/quiz\/[^/]+$/.test(path)) return "Làm bài kiểm tra từ vựng";
+  if (/^\/tests\/[^/]+\/setup$/.test(path)) return "Thiết lập bài thi TOEIC";
+  if (/^\/tests\/[^/]+\/run\/[^/]+$/.test(path)) return "Đang làm bài thi TOEIC";
+  if (/^\/tests\/[^/]+\/result\/[^/]+$/.test(path)) return "Kết quả bài thi TOEIC";
+  if (/^\/tests\/[^/]+\/review\/[^/]+$/.test(path)) return "Ôn tập đáp án TOEIC";
+
+  const partMatch = path.match(/^\/parts\/(\d+)$/);
+  if (partMatch) return `Luyện tập Part ${partMatch[1]}`;
+
+  return "Không tìm thấy trang";
+}
+
 /**
  * Render một page và truyền route params/navigation về page cũ.
  *
@@ -189,7 +221,7 @@ function AppLayout() {
   }, []);
 
   useEffect(() => {
-    document.title = "TOEICLab — Thống kê kết quả luyện tập";
+    document.title = `${getPageTitle(location.pathname)} | TOEICLab`;
     window.scrollTo(0, 0);
     setMobileNav(false);
   }, [location.pathname]);

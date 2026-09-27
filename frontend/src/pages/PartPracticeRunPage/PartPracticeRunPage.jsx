@@ -4,28 +4,7 @@ import { ArrowIcon, Button, Loading, Notice, partNames, safeMarkup } from "../..
 import "../PartPracticePage/PartPracticePage.scss";
 
 const SINGLE_PARTS = new Set([1, 2, 5]);
-
-/** Đọc câu hỏi đầu lượt tiếp theo đã lưu riêng cho từng Part trên thiết bị. */
-function readSavedCursor(partNumber, groupCount) {
-  try {
-    const savedCursor = Number(
-      window.localStorage.getItem(`toeiclab-part-cursor-${partNumber}`),
-    );
-    if (!Number.isInteger(savedCursor) || groupCount < 1) return 0;
-    return ((savedCursor % groupCount) + groupCount) % groupCount;
-  } catch (_) {
-    return 0;
-  }
-}
-
-/** Lưu vị trí tiếp tục; thao tác quay lui không gọi hàm này. */
-function saveCursor(partNumber, cursor) {
-  try {
-    window.localStorage.setItem(`toeiclab-part-cursor-${partNumber}`, cursor);
-  } catch (_) {
-    // Luyện tập vẫn hoạt động nếu trình duyệt chặn localStorage.
-  }
-}
+const MAX_CACHED_GROUPS = 18;
 
 /** Remove the source exam's question number from a standalone question stem. */
 function removeLeadingQuestionNumber(questionTitle) {
@@ -42,7 +21,7 @@ function PartPracticeRunPage({ partNumber, go }) {
   const part = Number(partNumber);
   const [data, setData] = useState(null);
   const [groupIndex, setGroupIndex] = useState(0);
-  const [resumeIndex, setResumeIndex] = useState(0);
+  const [windowOffset, setWindowOffset] = useState(0);
   const [answers, setAnswers] = useState({});
   const [results, setResults] = useState({});
   const [error, setError] = useState("");
@@ -57,7 +36,6 @@ function PartPracticeRunPage({ partNumber, go }) {
     setLoading(true);
     setData(null);
     setGroupIndex(0);
-    setResumeIndex(0);
     setAnswers({});
     setResults({});
     setError("");
@@ -66,10 +44,9 @@ function PartPracticeRunPage({ partNumber, go }) {
     practiceService
       .getPartQuestions(part)
       .then((partData) => {
-        const nextIndex = readSavedCursor(part, partData.groups.length);
         setData(partData);
-        setGroupIndex(nextIndex);
-        setResumeIndex(nextIndex);
+        setWindowOffset(partData.question_offset || 0);
+        setGroupIndex(0);
       })
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoading(false));
@@ -130,14 +107,11 @@ function PartPracticeRunPage({ partNumber, go }) {
   const groupIsChecked = currentQuestions.every(
     (question) => results[question.id],
   );
-  const totalQuestionCount = groups.reduce(
-    (total, group) => total + (group.questions?.length || 0),
-    0,
-  );
+  const totalQuestionCount = data?.total_questions || 0;
   const questionsBeforeCurrentGroup = groups
     .slice(0, groupIndex)
     .reduce((total, group) => total + (group.questions?.length || 0), 0);
-  const currentQuestionStartIndex = questionsBeforeCurrentGroup + 1;
+  const currentQuestionStartIndex = windowOffset + questionsBeforeCurrentGroup + 1;
   const progressLabel = `${currentQuestionStartIndex} / ${totalQuestionCount}`;
   const progressPercent = totalQuestionCount
     ? (currentQuestionStartIndex / totalQuestionCount) * 100
@@ -164,12 +138,72 @@ function PartPracticeRunPage({ partNumber, go }) {
     return () => document.body.classList.remove("toeic-part-practice-active");
   }, [hasActiveGroup, part]);
 
-  /** Lưu câu/cụm tiếp theo sau khi câu hiện tại đã được chấm thành công. */
-  const rememberNextGroup = () => {
-    const nextIndex = (groupIndex + 1) % groups.length;
-    setResumeIndex(nextIndex);
-    saveCursor(part, nextIndex);
+  /** Persist the group's first question so the next visit resumes at this location. */
+  const saveCurrentGroup = (index) => {
+    const questionId = groups[index]?.questions?.[0]?.id;
+    if (questionId) {
+      practiceService.savePartProgress(part, questionId).catch(() => {});
+    }
   };
+
+  /** Fetch another bounded group window only when navigation reaches a loaded edge. */
+  const loadAdjacentWindow = async (direction, navigate = true) => {
+    const edgeGroup = direction === "next" ? groups[groups.length - 1] : groups[0];
+    const edgeQuestion = direction === "next"
+      ? edgeGroup?.questions?.[edgeGroup.questions.length - 1]
+      : edgeGroup?.questions?.[0];
+    if (!edgeQuestion || busy) return false;
+
+    setBusy(true);
+    setError("");
+    try {
+      const nextWindow = await practiceService.getPartQuestions(part, {
+        cursor: edgeQuestion.id,
+        direction,
+      });
+      if (!nextWindow.groups.length) return false;
+      if (direction === "next") {
+        const combinedGroups = [...groups, ...nextWindow.groups];
+        const removedGroups = Math.max(0, combinedGroups.length - MAX_CACHED_GROUPS);
+        const removedQuestionCount = combinedGroups
+          .slice(0, removedGroups)
+          .reduce((count, group) => count + group.questions.length, 0);
+        setData((current) => ({
+          ...current,
+          ...nextWindow,
+          question_offset: current.question_offset + removedQuestionCount,
+          has_previous: current.has_previous || removedGroups > 0,
+          groups: combinedGroups.slice(-MAX_CACHED_GROUPS),
+        }));
+        setWindowOffset((current) => current + removedQuestionCount);
+        if (navigate) setGroupIndex(groups.length - removedGroups);
+      } else {
+        const combinedGroups = [...nextWindow.groups, ...groups];
+        setData((current) => ({
+          ...current,
+          ...nextWindow,
+          has_next: current.has_next,
+          groups: combinedGroups.slice(0, MAX_CACHED_GROUPS),
+        }));
+        setWindowOffset(nextWindow.question_offset);
+        setGroupIndex(nextWindow.groups.length - 1);
+      }
+      return true;
+    } catch (requestError) {
+      setError(requestError.message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (data?.has_next && groups.length && groupIndex >= groups.length - 2) {
+      loadAdjacentWindow("next", false);
+    }
+    // Prefetch only when the current window is nearly consumed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.has_next, groupIndex, groups.length]);
 
   /** Chấm ngay một câu đơn sau khi người dùng chọn đáp án. */
   const chooseSingleAnswer = async (questionId, option) => {
@@ -185,7 +219,7 @@ function PartPracticeRunPage({ partNumber, go }) {
         ...current,
         [questionId]: response.checked[0],
       }));
-      rememberNextGroup();
+      saveCurrentGroup(groupIndex);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -220,7 +254,7 @@ function PartPracticeRunPage({ partNumber, go }) {
           response.checked.map((result) => [result.question_id, result]),
         ),
       }));
-      rememberNextGroup();
+      saveCurrentGroup(groupIndex);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -229,24 +263,45 @@ function PartPracticeRunPage({ partNumber, go }) {
   };
 
   /** Tiến tiếp một câu/cụm và cập nhật điểm tiếp tục nếu đang ở đầu tiến độ. */
-  const moveNext = () => {
-    const nextIndex = (groupIndex + 1) % groups.length;
-    const isLastGroup = groupIndex === groups.length - 1;
-
-    setGroupIndex(nextIndex);
-    if (groupIndex === resumeIndex) {
-      setResumeIndex(nextIndex);
-      saveCursor(part, nextIndex);
+  const moveNext = async () => {
+    if (groupIndex === groups.length - 1) {
+      const loaded = await loadAdjacentWindow("next");
+      if (!loaded && data?.has_next === false) {
+        try {
+          const firstWindow = await practiceService.getPartQuestions(part, {
+            direction: "first",
+          });
+          setData(firstWindow);
+          setGroupIndex(0);
+          setWindowOffset(firstWindow.question_offset || 0);
+          setCycleCompleted(true);
+          const firstQuestionId = firstWindow.groups[0]?.questions[0]?.id;
+          if (firstQuestionId) {
+            practiceService.savePartProgress(part, firstQuestionId).catch(() => {});
+          }
+        } catch (requestError) {
+          setError(requestError.message);
+        }
+      }
+      return;
     }
+    const nextIndex = groupIndex + 1;
+    setGroupIndex(nextIndex);
+    saveCurrentGroup(nextIndex);
     setError("");
-    setCycleCompleted(isLastGroup);
+    setCycleCompleted(false);
   };
 
   /** Quay lại câu/cụm trước để xem lại mà không lùi điểm tiếp tục đã lưu. */
-  const movePrevious = () => {
-    setGroupIndex((current) =>
-      current === 0 ? Math.max(0, groups.length - 1) : current - 1,
-    );
+  const movePrevious = async () => {
+    if (groupIndex === 0) {
+      const loaded = await loadAdjacentWindow("previous");
+      if (!loaded && data?.has_previous === false) return;
+      return;
+    }
+    const previousIndex = groupIndex - 1;
+    setGroupIndex(previousIndex);
+    saveCurrentGroup(previousIndex);
     setError("");
     setCycleCompleted(false);
   };

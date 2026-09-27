@@ -29,6 +29,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware', 'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware', 'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware', 'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.middleware.RequestObservabilityMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware', 'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 ROOT_URLCONF = 'core.urls'
@@ -65,7 +66,8 @@ CSRF_TRUSTED_ORIGINS = [v for v in os.getenv('CSRF_TRUSTED_ORIGINS', 'http://loc
 REST_FRAMEWORK = {'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
                   'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
                   'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-                  'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 50}
+                  'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 50,
+                  'EXCEPTION_HANDLER': 'core.exceptions.api_exception_handler'}
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=14),
@@ -85,3 +87,20 @@ EMAIL_HOST = os.getenv('EMAIL_HOST', ''); EMAIL_PORT = int(os.getenv('EMAIL_PORT
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', ''); EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() == 'true'; DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'TOEIC Lab <no-reply@toeiclab.local>')
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+API_SLOW_REQUEST_MS = int(os.getenv('API_SLOW_REQUEST_MS', '1000'))
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {'json': {'()': 'core.observability.JsonLogFormatter'}},
+    'handlers': {'console': {'class': 'logging.StreamHandler', 'stream': 'ext://sys.stdout', 'formatter': 'json'}},
+    'root': {'handlers': ['console'], 'level': 'DEBUG' if DEBUG else 'INFO'},
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+        # Unhandled exceptions are logged once by RequestObservabilityMiddleware;
+        # suppress Django's duplicate request logger entry.
+        'django.request': {'handlers': ['console'], 'level': 'CRITICAL', 'propagate': False},
+        'django.db.backends': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+        'toeiclab': {'handlers': ['console'], 'level': 'DEBUG' if DEBUG else 'INFO', 'propagate': False},
+    },
+}
