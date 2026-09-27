@@ -4,7 +4,7 @@ import "./Modal.scss";
 /**
  * Modal cơ bản có đóng bằng nút, click backdrop hoặc phím Escape.
  */
-function Modal({ open, title, children, onClose }) {
+function Modal({ open, title, children, onClose, closeLabel = "Đóng" }) {
   useEffect(() => {
     if (!open) return undefined;
 
@@ -27,7 +27,7 @@ function Modal({ open, title, children, onClose }) {
       }}
     >
       <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
-        <button className="modal-close" onClick={onClose} aria-label="Đóng">
+        <button className="modal-close" onClick={onClose} aria-label={closeLabel}>
           ×
         </button>
         {title && <h2>{title}</h2>}

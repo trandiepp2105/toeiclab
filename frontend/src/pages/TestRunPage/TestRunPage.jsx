@@ -5,11 +5,20 @@ import {
   ArrowIcon,
   Loading,
   Notice,
-  partNames,
   safeMarkup,
 } from "../../shared/ui";
 import Modal from "../../components/common/Modal/Modal";
 import "./TestRunPage.scss";
+
+const englishPartNames = [
+  "Photographs",
+  "Question-Response",
+  "Conversations",
+  "Talks",
+  "Incomplete Sentences",
+  "Text Completion",
+  "Reading Comprehension",
+];
 
 /**
  * Bỏ qua asset đã được nhúng sẵn trong HTML đoạn văn.
@@ -46,14 +55,17 @@ function TestRunPage({ attemptId, go }) {
   const [seconds, setSeconds] = useState(0);
   const [timerReady, setTimerReady] = useState(false);
   const [activePartNumber, setActivePartNumber] = useState(null);
+  const [visitedDirectionParts, setVisitedDirectionParts] = useState([]);
+  const [failedDirectionImage, setFailedDirectionImage] = useState("");
   const [audioIndex, setAudioIndex] = useState(0);
-  const [autoPauseSeconds, setAutoPauseSeconds] = useState(null);
   const [starting, setStarting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [exitPromptOpen, setExitPromptOpen] = useState(false);
+  const [submitPromptOpen, setSubmitPromptOpen] = useState(false);
   const activeRef = useRef(null);
+  const questionPanelRef = useRef(null);
   const audioRef = useRef(null);
   const autoSubmitted = useRef(false);
   const exitActionRef = useRef(null);
@@ -68,6 +80,7 @@ function TestRunPage({ attemptId, go }) {
         const savedDraft = JSON.parse(
           localStorage.getItem(`toeiclab-attempt-${attemptId}`) || "{}",
         );
+        setVisitedDirectionParts(savedDraft.visitedDirectionParts || []);
         const old = { ...(savedDraft.answers || {}) };
         d.questions.forEach((q) => {
           if (q.selected_answer) {
@@ -110,10 +123,11 @@ function TestRunPage({ attemptId, go }) {
           ...savedDraft,
           index,
           answers,
+          visitedDirectionParts,
         }),
       );
     }
-  }, [answers, attemptId, data, index]);
+  }, [answers, attemptId, data, index, visitedDirectionParts]);
   useEffect(() => {
     const changed = () => setFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", changed);
@@ -147,7 +161,11 @@ function TestRunPage({ attemptId, go }) {
     (direction) => direction.part_number === q?.part_number,
   );
   const waitingForPartStart = Boolean(
-    full && q && (!fullTestStarted || activePartNumber !== q.part_number),
+    full &&
+      q &&
+      (!fullTestStarted ||
+        (activePartNumber !== q.part_number &&
+          !visitedDirectionParts.includes(q.part_number))),
   );
   const showQuestionSidebar = !full || q?.part_number >= 5;
   const sidebarQuestions = questions.filter((question) =>
@@ -278,7 +296,7 @@ function TestRunPage({ attemptId, go }) {
       if (answers[x.id]) values[x.id] = answers[x.id];
     });
     if (!Object.keys(values).length) {
-      setError("Hãy chọn đáp án trước khi kiểm tra.");
+      setError("Choose an answer before checking.");
       return;
     }
     try {
@@ -300,12 +318,7 @@ function TestRunPage({ attemptId, go }) {
    * Nộp bài thủ công sau khi người dùng xác nhận.
    */
   const submit = async () => {
-    if (
-      !window.confirm(
-        "Bạn chắc chắn muốn nộp bài? Sau khi nộp không thể thay đổi đáp án.",
-      )
-    )
-      return;
+    setSubmitPromptOpen(false);
     setBusy(true);
     try {
       await assessmentService.submitAttempt(attemptId);
@@ -347,8 +360,10 @@ function TestRunPage({ attemptId, go }) {
       }
 
       setActivePartNumber(partNumber);
+      setVisitedDirectionParts((visited) =>
+        visited.includes(partNumber) ? visited : [...visited, partNumber],
+      );
       setAudioIndex(0);
-      setAutoPauseSeconds(null);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (requestError) {
       setError(requestError.message);
@@ -365,9 +380,9 @@ function TestRunPage({ attemptId, go }) {
       Math.min(nextIndex, questions.length - 1),
     );
 
-    setAutoPauseSeconds(null);
     setAudioIndex(0);
     setIndex(nextQuestionIndex);
+    questionPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
 
     if (full && data?.exam_started_at) {
       progressSaveQueue.current = progressSaveQueue.current
@@ -410,34 +425,18 @@ function TestRunPage({ attemptId, go }) {
     const playRequest = audioElement.play();
     if (playRequest && typeof playRequest.catch === "function") {
       playRequest.catch(() => {
-        setError("Không thể tự phát audio. Hãy kiểm tra quyền phát media của trình duyệt rồi tải lại bài thi.");
+        setError("Audio could not play automatically. Check your browser's media permissions and reload the test.");
       });
     }
     return undefined;
   }, [activeAudioSource, activePartNumber, full, fullTestStarted, q]);
-
-  // Parts 3 and 4 get ten seconds after each conversation or talk; other listening parts retain five.
-  useEffect(() => {
-    if (autoPauseSeconds === null) return undefined;
-    if (autoPauseSeconds <= 0) {
-      setAutoPauseSeconds(null);
-      moveToQuestion(getNextAudioQuestionIndex());
-      return undefined;
-    }
-
-    const timer = window.setTimeout(
-      () => setAutoPauseSeconds((remaining) => remaining - 1),
-      1000,
-    );
-    return () => window.clearTimeout(timer);
-  }, [autoPauseSeconds, getNextAudioQuestionIndex, moveToQuestion]);
 
   const handleAudioEnded = () => {
     if (audioIndex + 1 < audioTracks.length) {
       setAudioIndex((currentIndex) => currentIndex + 1);
       return;
     }
-    setAutoPauseSeconds([3, 4].includes(q?.part_number) ? 10 : 5);
+    moveToQuestion(getNextAudioQuestionIndex());
   };
 
   /**
@@ -459,7 +458,7 @@ function TestRunPage({ attemptId, go }) {
       .join(" ");
   };
 
-  if (!data) return <Loading />;
+  if (!data) return <Loading label="Loading test..." />;
   const listening = q.part_number <= 4;
   const fullTestAudioPlayback = full && listening;
   const timeText = `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
@@ -472,7 +471,7 @@ function TestRunPage({ attemptId, go }) {
     return (
       <div className="run-answer" key={item.id}>
         <div className="run-question-label">
-          Câu hỏi <b>{item.number}.</b>
+          Question <b>{item.number}.</b>
         </div>
         {showQuestionPrompt && (
           <div className="run-question-stem">
@@ -483,7 +482,7 @@ function TestRunPage({ attemptId, go }) {
           <button
             key={letter}
             className={getOptionClassName(item, letter)}
-            aria-label={`Chọn đáp án ${letter}`}
+            aria-label={`Select answer ${letter}`}
             onClick={() => choose(item.id, letter)}
           >
             <span>{letter}</span>
@@ -496,10 +495,10 @@ function TestRunPage({ attemptId, go }) {
           <div
             className={`inline-explanation ${result.is_correct ? "good" : "bad"}`}
           >
-            <b>{result.is_correct ? "✓ Chính xác" : "✕ Chưa chính xác"}</b>
+            <b>{result.is_correct ? "✓ Correct" : "✕ Incorrect"}</b>
             <p>{result.explanation?.reason}</p>
             {result.explanation?.tip && (
-              <small>Mẹo: {result.explanation.tip}</small>
+              <small>Tip: {result.explanation.tip}</small>
             )}
           </div>
         )}
@@ -512,15 +511,43 @@ function TestRunPage({ attemptId, go }) {
       <span className="audio-label">AUDIO</span>
       {[...new Set(q?.audio_files || [])].map((src) => (
         <audio controls preload="none" key={src} src={src}>
-          Trình duyệt không hỗ trợ audio.
+          Your browser does not support audio.
         </audio>
       ))}
       {(!q?.audio_files || !q.audio_files.length) && (
-        <small>Không có file audio cho câu này.</small>
+        <small>No audio file is available for this question.</small>
       )}
     </div>
   ) : null;
   const controlsInAnswerColumn = data.mode === "subset" && q.part_number === 1;
+  const passageGroupNavigation = full && [6, 7].includes(q?.part_number);
+  const getNavigationTargetIndex = (direction) => {
+    if (!passageGroupNavigation) {
+      const targetIndex = index + (direction === "next" ? 1 : -1);
+      return targetIndex >= 0 && targetIndex < questions.length
+        ? targetIndex
+        : null;
+    }
+
+    const currentGroupIndices = group.map((question) =>
+      questions.findIndex((item) => item.id === question.id),
+    );
+    const boundaryIndex = direction === "next"
+      ? Math.max(...currentGroupIndices) + 1
+      : Math.min(...currentGroupIndices) - 1;
+    if (boundaryIndex < 0 || boundaryIndex >= questions.length) return null;
+
+    const boundaryQuestion = questions[boundaryIndex];
+    if (![6, 7].includes(boundaryQuestion.part_number)) return boundaryIndex;
+
+    return questions.findIndex(
+      (question) =>
+        question.part_number === boundaryQuestion.part_number &&
+        question.passage_id === boundaryQuestion.passage_id,
+    );
+  };
+  const previousTargetIndex = getNavigationTargetIndex("previous");
+  const nextTargetIndex = getNavigationTargetIndex("next");
   const examControls = (
     <div
       className={`exam-controls ${controlsInAnswerColumn ? "exam-controls-in-column" : ""}`}
@@ -528,29 +555,30 @@ function TestRunPage({ attemptId, go }) {
       {!fullTestAudioPlayback && (
         <Button
           kind="outline"
-          disabled={index === 0}
-          onClick={() => moveToQuestion(index - 1)}
+          disabled={previousTargetIndex === null}
+          onClick={() => moveToQuestion(previousTargetIndex)}
         >
-          <ArrowIcon direction="left" /> Câu trước
+          <ArrowIcon direction="left" />
+          {passageGroupNavigation ? "Previous Questions" : "Previous Question"}
         </Button>
       )}
       <div className="control-center">
         {!full && (
           <Button kind="soft" onClick={checkCurrent}>
-            Kiểm tra đáp án
+            Check Answer
           </Button>
         )}
         <span>
           {index + 1} / {questions.length}
         </span>
       </div>
-      {fullTestAudioPlayback ? null : index < questions.length - 1 ? (
-        <Button onClick={() => moveToQuestion(index + 1)}>
-          Câu tiếp theo <ArrowIcon />
+      {fullTestAudioPlayback ? null : nextTargetIndex !== null ? (
+        <Button onClick={() => moveToQuestion(nextTargetIndex)}>
+          {passageGroupNavigation ? "Next Questions" : "Next Question"} <ArrowIcon />
         </Button>
       ) : (
-        <Button kind="danger" onClick={submit}>
-          {full ? "Nộp bài" : "Hoàn thành Part"}
+        <Button kind="danger" onClick={() => setSubmitPromptOpen(true)}>
+          {full ? "Submit Test" : "Complete Part"}
         </Button>
       )}
     </div>
@@ -559,19 +587,49 @@ function TestRunPage({ attemptId, go }) {
   const exitDialog = (
     <Modal
       open={exitPromptOpen}
-      title="Bạn muốn rời bài thi?"
+      title="Leave the test?"
       onClose={cancelExit}
+      closeLabel="Close"
     >
       <p>
-        Bài làm hiện tại sẽ được lưu để bạn có thể tiếp tục sau. Bạn có chắc
-        chắn muốn rời khỏi bài thi này không?
+        Your work is saved, so you can continue later. Are you sure you want to
+        leave this test?
       </p>
       <div className="dialog-actions">
         <Button kind="outline" onClick={cancelExit}>
-          Tiếp tục làm bài
+          Continue Test
         </Button>
         <Button kind="danger" onClick={confirmExit}>
-          Rời bài thi
+          Leave Test
+        </Button>
+      </div>
+    </Modal>
+  );
+  const submitDialog = (
+    <Modal
+      open={submitPromptOpen}
+      title="Submit this test?"
+      onClose={() => setSubmitPromptOpen(false)}
+      closeLabel="Close"
+    >
+      <div className="submit-confirmation">
+        <div className="submit-confirmation-icon" aria-hidden="true">
+          !
+        </div>
+        <p>
+          You’re about to submit your answers. You won’t be able to change them
+          after submitting.
+        </p>
+        <div className="submit-confirmation-count">
+          {Object.keys(answers).length} of {questions.length} questions answered
+        </div>
+      </div>
+      <div className="dialog-actions">
+        <Button kind="outline" onClick={() => setSubmitPromptOpen(false)}>
+          Keep Working
+        </Button>
+        <Button kind="danger" disabled={busy} onClick={submit}>
+          {busy ? "Submitting…" : "Submit Test"}
         </Button>
       </div>
     </Modal>
@@ -601,15 +659,19 @@ function TestRunPage({ attemptId, go }) {
                   }}
                 />
               ) : (
-                <p>Hãy đọc kỹ hướng dẫn trước khi bắt đầu Part {q.part_number}.</p>
+                <p>Read the instructions before starting Part {q.part_number}.</p>
               )}
-              {currentDirection?.image && (
-                <img
-                  className="exam-direction-image"
-                  src={currentDirection.image}
-                  alt={`Hình minh họa direction Part ${q.part_number}`}
-                />
-              )}
+              {currentDirection?.image &&
+                failedDirectionImage !== currentDirection.image && (
+                  <img
+                    className="exam-direction-image"
+                    src={currentDirection.image}
+                    alt={`Part ${q.part_number} illustration`}
+                    onError={() =>
+                      setFailedDirectionImage(currentDirection.image)
+                    }
+                  />
+                )}
               {currentDirection?.example_html && (
                 <div
                   className="exam-direction-example"
@@ -624,11 +686,11 @@ function TestRunPage({ attemptId, go }) {
           <div className="exam-directions-actions">
             <span>
               {fullTestStarted
-                ? "Thời gian toàn bài vẫn tiếp tục chạy trong phần hướng dẫn này."
-                : "Thời gian toàn bài bắt đầu khi bạn bắt đầu Part 1."}
+                ? "The test timer continues while you read these instructions."
+                : "The test timer starts when you begin Part 1."}
             </span>
             <Button disabled={starting} onClick={() => beginPart(q.part_number)}>
-              {starting ? "Đang bắt đầu…" : `Bắt đầu Part ${q.part_number}`}
+              {starting ? "Starting…" : `Start Part ${q.part_number}`}
               <ArrowIcon />
             </Button>
           </div>
@@ -639,6 +701,7 @@ function TestRunPage({ attemptId, go }) {
   return (
     <div className={`exam-shell ${fullscreen ? "exam-fullscreen" : ""}`}>
       {exitDialog}
+      {submitDialog}
       <header className="exam-header">
         <button
           className="exam-brand"
@@ -654,19 +717,17 @@ function TestRunPage({ attemptId, go }) {
           </span>
         </button>
         <div className="exam-header-status">
-          <span className="saving-status">● Tiến độ được lưu</span>
           {full && <strong className="exam-timer">{timeText}</strong>}
-          {full && autoPauseSeconds !== null && (
-            <span className="exam-audio-countdown">
-              Câu tiếp theo sau {autoPauseSeconds} giây
-            </span>
-          )}
           <button className="exam-tool" onClick={toggleFullscreen}>
-            ⛶ {fullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
+            ⛶ {fullscreen ? "Exit Full Screen" : "Full Screen"}
           </button>
           {full && (
-            <Button kind="danger" disabled={busy} onClick={submit}>
-              {busy ? "Đang nộp…" : "Nộp bài"}
+            <Button
+              kind="danger"
+              disabled={busy}
+              onClick={() => setSubmitPromptOpen(true)}
+            >
+              {busy ? "Submitting…" : "Submit Test"}
             </Button>
           )}
         </div>
@@ -674,11 +735,11 @@ function TestRunPage({ attemptId, go }) {
       <div className={`exam-workspace ${full ? "exam-workspace-full-test" : ""} ${full && showQuestionSidebar ? "exam-workspace-has-sidebar" : ""}`}>
         {showQuestionSidebar && <aside className="exam-sidebar">
           <div className="exam-sidebar-heading">
-            <b>Danh sách câu hỏi</b>
+            <b>Questions</b>
             <small>
               {sidebarQuestions.filter((question) => answers[question.id]).length}
               {" / "}
-              {sidebarQuestions.length} đã làm
+              {sidebarQuestions.length} answered
             </small>
           </div>
           {Array.from({ length: 7 }, (_, i) => i + 1)
@@ -687,7 +748,7 @@ function TestRunPage({ attemptId, go }) {
             <div className="exam-part-nav" key={part}>
               <div className="exam-part-title">
                 Part {part}
-                <small>{partNames[part - 1]}</small>
+                <small>{englishPartNames[part - 1]}</small>
               </div>
               <div className="question-number-grid">
                 {questions
@@ -717,10 +778,12 @@ function TestRunPage({ attemptId, go }) {
               <div className="eyebrow">
                 {listening ? "LISTENING" : "READING"} · PART {q?.part_number}
               </div>
-              <h1>{partNames[(q?.part_number || 1) - 1]}</h1>
+              <h1>
+                Part {q?.part_number}: {englishPartNames[(q?.part_number || 1) - 1]}
+              </h1>
             </div>
             {/* <span>
-              Câu {q?.number}
+              Question {q?.number}
               {full && [3, 4].includes(q?.part_number) && group.length > 1
                 ? `–${group.at(-1).number}`
                 : ""}
@@ -749,7 +812,7 @@ function TestRunPage({ attemptId, go }) {
                   <img
                     className="question-image"
                     src={src}
-                    alt={`Câu ${q.number}`}
+                    alt={`Question ${q.number}`}
                     key={src}
                   />
                 ))}
@@ -760,7 +823,7 @@ function TestRunPage({ attemptId, go }) {
                 <div className="panel-heading">
                   <div>
                     <div className="eyebrow">READING PASSAGE</div>
-                    <h2>Đoạn văn</h2>
+                    <h2>Reading Passage</h2>
                   </div>
                   <span>Part {q.part_number}</span>
                 </div>
@@ -775,20 +838,22 @@ function TestRunPage({ attemptId, go }) {
                   <div className="passage-copy">{q.question}</div>
                 ) : null}
                 {additionalPassageAssets.map((src) => (
-                  <img key={src} src={src} alt="Đoạn đọc" />
+                  <img key={src} src={src} alt="Reading passage" />
                 ))}
               </section>
             )}
-            <section className="question-panel">
+            <section className="question-panel" ref={questionPanelRef}>
               <div className="question-panel-title">
                 <span>
                   {q.part_number === 1
-                    ? "Quan sát hình ảnh và chọn mô tả phù hợp"
+                    ? "Look at the picture and choose the description that matches."
                     : q.part_number === 2
-                      ? "Nghe câu hỏi và chọn phản hồi phù hợp"
+                      ? "Listen to the question and choose the appropriate response."
                       : q.part_number === 5
-                        ? "Chọn từ hoặc cụm từ phù hợp để hoàn thành câu"
-                        : `Câu hỏi ${q.number}–${group.at(-1)?.number || q.number}`}
+                        ? "Choose the word or phrase that best completes the sentence."
+                        : group.length > 1
+                          ? `Questions ${q.number}–${group.at(-1)?.number || q.number}`
+                          : `Question ${q.number}`}
                 </span>
                 <span>
                   {group.filter((x) => answers[x.id]).length}/{group.length}

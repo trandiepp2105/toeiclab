@@ -27,17 +27,16 @@ function ExamHeader({
         </span>
       </button>
       <div className="exam-header-status">
-        <span className="saving-status">● Tiến độ được lưu</span>
         {timeText && <strong className="exam-timer">{timeText}</strong>}
         <button className="exam-tool" onClick={onFullscreen}>
-          ⛶ {fullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
+          ⛶ {fullscreen ? "Exit Full Screen" : "Full Screen"}
         </button>
         <button
           className="button button-danger"
           disabled={submitting}
           onClick={onSubmit}
         >
-          {submitting ? "Đang nộp…" : "Nộp bài"}
+          {submitting ? "Submitting…" : "Submit Test"}
         </button>
       </div>
     </header>

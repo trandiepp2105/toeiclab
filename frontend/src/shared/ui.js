@@ -77,11 +77,11 @@ function ArrowIcon({ direction = "right", className = "" }) {
 /**
  * Trạng thái loading toàn trang hoặc trong một page.
  */
-function Loading() {
+function Loading({ label = "Đang tải dữ liệu TOEICLab…" }) {
   return (
     <div className="loading">
       <span className="spinner" />
-      Đang tải dữ liệu TOEICLab…
+      {label}
     </div>
   );
 }

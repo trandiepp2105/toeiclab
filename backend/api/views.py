@@ -201,7 +201,10 @@ def logout_view(request):
 def refresh_session(request):
     """Exchange a valid refresh JWT for a new access JWT."""
     payload=TokenRefreshSerializer(data=request.data)
-    if not payload.is_valid():return Response(payload.errors,status=401)
+    try:
+        if not payload.is_valid():return Response(payload.errors,status=401)
+    except User.DoesNotExist:
+        return error('Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại.',401)
     return Response(payload.validated_data)
 @api_view(['GET','PATCH'])
 def me(request):
