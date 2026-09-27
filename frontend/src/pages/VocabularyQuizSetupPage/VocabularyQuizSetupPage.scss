@@ -103,12 +103,61 @@
 }
 .type-options {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   color: #65748a;
-  font-size: 11px;
+  font-size: 12px;
 }
-.type-options input {
+.type-option {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  border: 1px solid #e3e8ef;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.type-option:hover {
+  border-color: #b9c9e2;
+  background: #fbfcff;
+}
+.type-option.selected {
+  border-color: #a9c1ed;
+  background: #f6f9ff;
+  box-shadow: 0 0 0 2px #2d6bd60d;
+}
+.type-option input {
   accent-color: #2d6bd6;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+  cursor: pointer;
+}
+.type-option-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1.35fr);
+  align-items: center;
+  gap: 8px;
+  line-height: 1.35;
+}
+.type-option-copy > span:first-child {
+  color: #45566e;
+  font-weight: 650;
+}
+.type-option-copy > span:last-child {
+  color: #6f7f95;
+}
+.type-option-arrow {
+  width: 15px;
+  height: 15px;
+  justify-self: center;
+  vertical-align: middle;
 }
 .setup-card > .button {
   width: 100%;

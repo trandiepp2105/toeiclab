@@ -108,21 +108,33 @@ function VocabularyQuizSetupPage({ go, openLogin }) {
           </div>
           <h2>3. Dạng câu hỏi</h2>
           <div className="type-options">
-            <label>
+            <label
+              className={`type-option ${types.includes("vi_to_en") ? "selected" : ""}`}
+            >
               <input
                 type="checkbox"
                 checked={types.includes("vi_to_en")}
                 onChange={() => toggle("vi_to_en")}
-              />{" "}
-              Tiếng Việt → chọn tiếng Anh
+              />
+              <span className="type-option-copy">
+                <span>Tiếng Việt</span>
+                <ArrowIcon className="type-option-arrow" />
+                <span>chọn tiếng Anh</span>
+              </span>
             </label>
-            <label>
+            <label
+              className={`type-option ${types.includes("en_to_vi") ? "selected" : ""}`}
+            >
               <input
                 type="checkbox"
                 checked={types.includes("en_to_vi")}
                 onChange={() => toggle("en_to_vi")}
-              />{" "}
-              Tiếng Anh → chọn nghĩa tiếng Việt
+              />
+              <span className="type-option-copy">
+                <span>Tiếng Anh</span>
+                <ArrowIcon className="type-option-arrow" />
+                <span>chọn nghĩa tiếng Việt</span>
+              </span>
             </label>
           </div>
           <Notice error={error} />
