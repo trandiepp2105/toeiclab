@@ -91,19 +91,34 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', ''); EMAIL_HOST_PASSWORD = os.get
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() == 'true'; DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'TOEIC Lab <no-reply@toeiclab.local>')
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 API_SLOW_REQUEST_MS = int(os.getenv('API_SLOW_REQUEST_MS', '1000'))
+LOG_FILE = Path(os.getenv('DJANGO_LOG_FILE', BASE_DIR / 'logs' / 'toeiclab.log'))
+LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+LOG_HANDLERS = ['console', 'file']
 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {'json': {'()': 'core.observability.JsonLogFormatter'}},
-    'handlers': {'console': {'class': 'logging.StreamHandler', 'stream': 'ext://sys.stdout', 'formatter': 'json'}},
-    'root': {'handlers': ['console'], 'level': 'DEBUG' if DEBUG else 'INFO'},
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
+            'formatter': 'json',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': str(LOG_FILE),
+            'encoding': 'utf-8',
+            'formatter': 'json',
+        },
+    },
+    'root': {'handlers': LOG_HANDLERS, 'level': 'DEBUG' if DEBUG else 'INFO'},
     'loggers': {
-        'django': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+        'django': {'handlers': LOG_HANDLERS, 'level': 'WARNING', 'propagate': False},
         # Unhandled exceptions are logged once by RequestObservabilityMiddleware;
         # suppress Django's duplicate request logger entry.
-        'django.request': {'handlers': ['console'], 'level': 'CRITICAL', 'propagate': False},
-        'django.db.backends': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
-        'toeiclab': {'handlers': ['console'], 'level': 'DEBUG' if DEBUG else 'INFO', 'propagate': False},
+        'django.request': {'handlers': LOG_HANDLERS, 'level': 'CRITICAL', 'propagate': False},
+        'django.db.backends': {'handlers': LOG_HANDLERS, 'level': 'ERROR', 'propagate': False},
+        'toeiclab': {'handlers': LOG_HANDLERS, 'level': 'DEBUG' if DEBUG else 'INFO', 'propagate': False},
     },
 }

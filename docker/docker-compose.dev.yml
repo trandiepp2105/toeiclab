@@ -29,6 +29,7 @@ services:
       CORS_ALLOWED_ORIGINS: http://localhost,http://127.0.0.1
       CSRF_TRUSTED_ORIGINS: http://localhost,http://127.0.0.1
     volumes:
+      - ../data/logs:/app/logs
       - ../data/vocab/topic_images:/data/vocab/topic_images:ro
       - ../data/vocab/topic_audio:/data/vocab/topic_audio:ro
       - static_data:/app/staticfiles

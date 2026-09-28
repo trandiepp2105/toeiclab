@@ -6,3 +6,4 @@ db.sqlite3
 
 # Local data files
 /data/
+/backend/logs/

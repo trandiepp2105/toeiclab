@@ -23,6 +23,7 @@ services:
       MYSQL_PORT: 3306
       REDIS_URL: redis://redis:6379/1
     volumes:
+      - ../data/logs:/app/logs
       - ../data/vocab/topic_images:/data/vocab/topic_images:ro
       - ../data/vocab/topic_audio:/data/vocab/topic_audio:ro
       - media_data:/app/media
