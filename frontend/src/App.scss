@@ -311,11 +311,21 @@
 }
 @media (max-width: 800px) {
   .mobile-menu {
-    display: block;
+    display: grid;
+    place-items: center;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
     border: 0;
+    border-radius: 10px;
     background: none;
     color: #344b68;
-    font-size: 18px;
+    font-size: 22px;
+    cursor: pointer;
+  }
+
+  .mobile-menu:hover {
+    background: #f1f5fb;
   }
 }
 @media (max-width: 800px) {
@@ -334,6 +344,10 @@
   .page-content {
     padding: 24px var(--content-inline-padding);
   }
+
+  .auth-required-prompt {
+    padding: 24px;
+  }
 }
 @media (max-width: 800px) {
   .footer {
@@ -350,6 +364,56 @@
 }
 @media (max-width: 560px) {
   .streak-login { font-size: 0; }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    gap: 8px;
+    height: 56px;
+  }
+
+  .breadcrumbs {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+  }
+
+  .topbar-actions {
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .topbar-actions > .button {
+    min-height: 38px;
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+
+  .page-content {
+    padding: 18px 14px 22px;
+  }
+
+  .auth-required-prompt {
+    gap: 10px;
+    padding: 20px;
+  }
+
+  .auth-required-prompt h1 {
+    font-size: 20px;
+  }
+
+  .auth-required-prompt p {
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .footer {
+    flex-wrap: wrap;
+    gap: 5px 12px;
+    font-size: 9px;
+  }
 }
 
 $surface: #ffffff;

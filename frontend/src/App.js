@@ -363,8 +363,13 @@ function AppLayout() {
       )}
 
       <main className="main-shell">
-        {/* <header className="topbar">
-          <button className="mobile-menu" onClick={() => setMobileNav(true)}>
+        <header className="topbar">
+          <button
+            className="mobile-menu"
+            onClick={() => setMobileNav(true)}
+            aria-label="Mở menu điều hướng"
+            aria-expanded={mobileNav}
+          >
             ☰
           </button>
 
@@ -407,7 +412,7 @@ function AppLayout() {
               </Button>
             )}
           </div>
-        </header> */}
+        </header>
 
         <div className="page-content">
           <AppRoutes user={user} openLogin={openLogin} logout={logout} />

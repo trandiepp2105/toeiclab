@@ -1,0 +1,8 @@
+FORWARD NGINX: 
+sudo iptables -I FORWARD 1 -i ens5 -o podman1 \
+  -p tcp -d 10.89.0.0/24 --dport 80 \
+  -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+
+sudo iptables -I FORWARD 1 -i ens5 -o podman1 \
+  -p tcp -d 10.89.0.0/24 --dport 443 \
+  -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
