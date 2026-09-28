@@ -861,3 +861,59 @@ body.toeic-full-test-running .question-layout > .question-panel, body.toeic-full
     grid-template-rows: minmax(0, 0.7fr) minmax(0, 1fr);
   }
 }
+
+/* Compact exam controls and content only on phone-sized viewports. */
+@media (max-width: 560px) {
+  .exam-shell { margin: -18px -14px -22px; }
+  .exam-header { min-height: 52px; align-items: center; gap: 6px; padding: 5px 8px; }
+  .exam-brand { min-width: 0; gap: 5px; }
+  .exam-brand .brand-logo { width: 30px; height: 30px; flex-basis: 30px; }
+  .exam-brand small { max-width: 95px; font-size: 8px; }
+  .exam-header-status { flex-wrap: nowrap; gap: 4px; }
+  .exam-header-status .button, .exam-tool { min-height: 29px; max-width: 68px; padding: 4px 6px; font-size: 8px; }
+  .exam-timer { font-size: 13px; }
+  .exam-workspace { padding: 6px; }
+  .exam-progress-heading { padding: 8px 10px; }
+  .exam-progress-heading h1 { margin-top: 3px; font-size: 15px; line-height: 1.25; }
+  .question-layout { gap: 7px; margin: 7px 0; }
+  .question-panel, .passage-panel, .listening-image-panel { padding: 9px; }
+  .passage-copy { padding: 7px 2px; font-size: 10px; line-height: 1.5; }
+  .question-panel-title { gap: 5px; margin-bottom: 7px; padding-bottom: 6px; font-size: 9px; }
+  .run-question { padding-bottom: 7px; }
+  .run-question-stem { margin-bottom: 6px; font-size: 11px; line-height: 1.4; }
+  .run-option { min-height: 30px; gap: 6px; margin: 4px 0; padding: 5px 7px; font-size: 10px; }
+  .run-option > span { width: 17px; height: 17px; font-size: 8px; }
+  .exam-controls { gap: 4px; padding: 6px; }
+  .exam-controls .button, .control-center .button { min-height: 30px; padding: 0 6px; font-size: 8px; }
+  .control-center { gap: 4px; font-size: 8px; }
+
+  body.toeic-full-test-running .exam-header { flex-basis: 52px; }
+  body.toeic-full-test-running .exam-workspace { gap: 5px; padding: 5px; }
+  body.toeic-full-test-running .exam-sidebar {
+    display: flex; width: 100%; height: 65px; max-height: 65px; flex: 0 0 65px;
+    gap: 4px; margin: 0 0 4px; padding: 4px; overflow: auto hidden;
+    overscroll-behavior-x: contain;
+  }
+  body.toeic-full-test-running .exam-sidebar-heading {
+    position: sticky; left: 0; z-index: 1; min-width: 62px; align-content: center;
+    padding: 3px; background: #fff;
+  }
+  body.toeic-full-test-running .exam-part-nav { flex: 0 0 150px; padding: 2px 4px; }
+  body.toeic-full-test-running .exam-part-title { flex-direction: row; gap: 5px; margin-bottom: 3px; font-size: 8px; }
+  body.toeic-full-test-running .exam-part-title small { overflow: hidden; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+  body.toeic-full-test-running .question-number-grid { grid-template-columns: repeat(10, minmax(16px, 1fr)); gap: 2px; }
+  body.toeic-full-test-running .question-number-grid button { height: 19px; font-size: 7px; }
+  body.toeic-full-test-running .exam-main { gap: 5px; }
+  body.toeic-full-test-running .exam-progress-heading { padding: 6px 8px; }
+  body.toeic-full-test-running .question-layout { gap: 5px; margin: 0; }
+  body.toeic-full-test-running .question-layout.reading-layout { grid-template-rows: minmax(0, 0.42fr) minmax(0, 0.58fr); }
+  body.toeic-full-test-running .question-layout > .passage-panel,
+  body.toeic-full-test-running .question-layout > .listening-image-panel { padding: 7px; }
+  body.toeic-full-test-running .passage-copy { max-height: none; font-size: 9px; line-height: 1.45; }
+}
+
+@media (max-width: 380px) {
+  .exam-brand small { max-width: 72px; }
+  .exam-header-status .button, .exam-tool { max-width: 57px; font-size: 7px; }
+  .exam-controls .button, .control-center .button { padding: 0 4px; font-size: 7px; }
+}

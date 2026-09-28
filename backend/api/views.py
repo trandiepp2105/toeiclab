@@ -26,7 +26,7 @@ from content.models import Exam, ExamPart, Direction, Question, QuestionOption
 from vocabulary.models import VocabularyTopic, VocabularyTerm, TopicTerm
 from learning.models import VocabularyProgress, VocabularyQuizAttempt, VocabularyQuizAnswer, PartPracticeProgress
 from learning.services import create_quiz, answer_quiz, submit_quiz, calculate_study_streak
-from assessments.models import TestAttempt, TestAnswer
+from assessments.models import TestAttempt, TestAnswer, PartScore
 from assessments.services import (
     ActiveFullTestExists,
     start_attempt,
@@ -795,9 +795,8 @@ def dashboard_summary(request):
     topics = list(
         VocabularyTopic.objects.filter(is_published=True).prefetch_related('topic_terms')
     )
-    quiz_rows = VocabularyQuizAttempt.objects.filter(
-        user=request.user,
-        answers__answered_at__isnull=False,
+    quiz_rows = VocabularyQuizAttempt.objects.filter(user=request.user).filter(
+        Q(status='submitted') | Q(answers__answered_at__isnull=False),
     ).distinct()
     quiz_answers = VocabularyQuizAnswer.objects.filter(
         attempt__user=request.user,
@@ -812,20 +811,19 @@ def dashboard_summary(request):
             question_count=Sum('question_count'),
         )
     }
-    answer_rows = TestAnswer.objects.filter(
+    part_score_rows = PartScore.objects.filter(
         attempt__user=request.user,
         attempt__status='submitted',
-        answered_at__isnull=False,
-    ).select_related('question__exam_part')
+    ).values('exam_part__part_number').annotate(
+        answered_count=Sum('answered_count'),
+        correct_count=Sum('correct_count'),
+    )
     part_progress = {}
-    for answer in answer_rows:
-        part_number = answer.question.exam_part.part_number
-        progress = part_progress.setdefault(
-            part_number,
-            {'answered_count': 0, 'correct_count': 0},
-        )
-        progress['answered_count'] += 1
-        progress['correct_count'] += int(bool(answer.is_correct))
+    for row in part_score_rows:
+        part_progress[row['exam_part__part_number']] = {
+            'answered_count': row['answered_count'] or 0,
+            'correct_count': row['correct_count'] or 0,
+        }
 
     parts = []
     for part_number in range(1, 8):
@@ -999,7 +997,16 @@ def quiz_submit(request,attempt_id):
         log_event(logger, logging.INFO, 'vocabulary_quiz_submitted', service='learning', user_id=request.user.pk, resource_id=attempt.pk)
     return Response(quiz_json(attempt,True))
 @api_view(['GET'])
-def quiz_result(request,attempt_id):return quiz_detail(request,attempt_id)
+def quiz_result(request,attempt_id):
+    """Return a completed quiz with its answer key for the result screen."""
+    if not request.user.is_authenticated:
+        return error('Đăng nhập để xem kết quả quiz.',401)
+    attempt=get_quiz(request,attempt_id)
+    if not attempt:
+        return error('Không tìm thấy quiz.',404)
+    if attempt.status != 'submitted':
+        return error('Quiz chưa hoàn thành.',409)
+    return Response(quiz_json(attempt,True))
 @api_view(['GET'])
 def quiz_history(request):
     if not request.user.is_authenticated:return error('Đăng nhập để xem lịch sử.',401)
