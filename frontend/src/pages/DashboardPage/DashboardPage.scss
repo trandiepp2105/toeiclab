@@ -706,6 +706,7 @@
 .metric-icon.blue, .quick-icon.blue { background: #e0e0ff; color: #2d34b3; }
 .metric-icon.green { background: #d9f5eb; color: #008761; }
 .metric-icon.amber { background: #fff0d6; color: #b36a00; }
+.metric-icon img { width: 19px; height: 19px; object-fit: contain; filter: invert(42%) sepia(84%) saturate(913%) hue-rotate(2deg) brightness(91%) contrast(101%); }
 .quick-icon.teal { background: #d7f1f4; color: #006398; }
 .vocabulary-metric small { color: #68778d; font-size: 12px; }
 .vocabulary-metric strong { font-size: 18px; }

@@ -319,7 +319,10 @@ function PartPracticeRunPage({ partNumber, go }) {
   }
 
   return (
-    <div className="part-practice-run" ref={practiceRunRef}>
+    <div
+      className={`part-practice-run ${fullscreen ? "is-fullscreen" : ""}`}
+      ref={practiceRunRef}
+    >
       <header className="practice-run-header">
         <div>
           <div className="eyebrow">LUYỆN TẬP TỪNG PHẦN</div>

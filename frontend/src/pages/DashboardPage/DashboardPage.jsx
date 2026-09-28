@@ -124,7 +124,12 @@ function DashboardPage({ go, user }) {
               answeredCount={vocabulary.quiz_answered_count}
             />
             <Metric icon="✓" label="Quiz đã làm" value={fmt(vocabulary.quiz_count)} tone="green" />
-            <Metric icon="◷" label="Chủ đề" value={fmt(vocabulary.topic_count)} tone="amber" />
+            <Metric
+              icon={<img src="/icons/topic.svg" alt="" />}
+              label="Chủ đề"
+              value={fmt(vocabulary.topic_count)}
+              tone="amber"
+            />
           </div>
           <div className="dashboard-quick-actions">
             <button onClick={() => go("/vocabulary/topics")}><span className="quick-icon blue">▤</span><span><strong>Học theo chủ đề</strong><small>Khám phá các chủ đề TOEIC</small></span><b><ArrowIcon /></b></button>
