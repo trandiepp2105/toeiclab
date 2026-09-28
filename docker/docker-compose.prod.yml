@@ -58,10 +58,12 @@ services:
     restart: unless-stopped
   nginx:
     image: nginx:1.27-alpine
-    ports: ["${HTTP_PORT:-80}:80"]
+    ports: ["${HTTP_PORT:-80}:80", "${HTTPS_PORT:-443}:443"]
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ../nginx/conf.d/prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ../data/certbot/www:/var/www/certbot:ro
       - ../data/zenlish_data:/data/zenlish_data:ro
       - ../data/vocab:/data/vocab:ro
       - ../data/directions:/data/directions:ro

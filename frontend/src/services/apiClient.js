@@ -84,6 +84,11 @@ const getUserFriendlyErrorMessage = (error) => {
   if (typeof payload?.detail === "string") return payload.detail;
   if (typeof payload?.message === "string") return payload.message;
 
+  const validationMessages = Object.values(payload || {})
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value) => typeof value === "string");
+  if (validationMessages.length > 0) return validationMessages[0];
+
   return error.message;
 };
 

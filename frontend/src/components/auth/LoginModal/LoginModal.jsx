@@ -1,8 +1,11 @@
 import React, { useCallback, useState } from "react";
 import authService from "../../../services/authService";
-import { Button, Notice } from "../../../shared/ui";
+import { Button } from "../../../shared/ui";
 import GoogleLoginButton from "../GoogleLoginButton/GoogleLoginButton";
 import OtpForm from "../OtpForm/OtpForm";
+import PasswordRequirements from "../../../shared/PasswordRequirements";
+import FormWarning from "../../../shared/FormWarning";
+import { isPasswordPolicySatisfied, PASSWORD_POLICY_MESSAGE } from "../../../shared/passwordPolicy";
 import "./LoginModal.scss";
 
 /**
@@ -48,6 +51,10 @@ function LoginModal({ onClose, onUser }) {
    */
   const submit = async (event) => {
     event.preventDefault();
+    if (mode === "register" && !requested && !isPasswordPolicySatisfied(password)) {
+      setError(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -116,15 +123,17 @@ function LoginModal({ onClose, onUser }) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                minLength="8"
+                maxLength={mode === "register" ? 128 : undefined}
+                autoComplete={mode === "register" ? "new-password" : "current-password"}
                 required
               />
+              {mode === "register" && <PasswordRequirements />}
             </label>
           )}
           {requested && (
             <OtpForm value={otp} onChange={setOtp} />
           )}
-          <Notice error={error} />
+          <FormWarning message={error} />
           <Button disabled={busy}>
             {busy
               ? "Đang xử lý…"

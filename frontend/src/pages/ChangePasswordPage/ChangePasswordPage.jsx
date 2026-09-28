@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import authService from "../../services/authService";
-import { Button, Notice, SectionTitle } from "../../shared/ui";
+import { Button, SectionTitle } from "../../shared/ui";
+import FormWarning from "../../shared/FormWarning";
+import { isPasswordPolicySatisfied, PASSWORD_POLICY_MESSAGE } from "../../shared/passwordPolicy";
 import "./ChangePasswordPage.scss";
 
 const OTP_LENGTH = 6;
@@ -67,6 +69,10 @@ function ChangePasswordPage({ user }) {
       setError("Mật khẩu xác nhận chưa khớp.");
       return;
     }
+    if (!isPasswordPolicySatisfied(newPassword)) {
+      setError(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -118,7 +124,7 @@ function ChangePasswordPage({ user }) {
               onChange={(event) => setEmail(event.target.value)}
               required
             />
-            <Notice error={error} />
+            <FormWarning message={error} />
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Đang gửi…" : "Gửi yêu cầu đổi mật khẩu"}
             </Button>
@@ -143,7 +149,7 @@ function ChangePasswordPage({ user }) {
               aria-label="Mã OTP gồm 6 chữ số"
               required
             />
-            <Notice error={error} />
+            <FormWarning message={error} />
             {notice && <p className="password-reset-notice">{notice}</p>}
             <Button type="submit" disabled={isSubmitting || otp.length !== OTP_LENGTH}>
               {isSubmitting ? "Đang xác nhận…" : "Xác nhận OTP"}
@@ -157,13 +163,13 @@ function ChangePasswordPage({ user }) {
         {step === "password" && (
           <form onSubmit={submitNewPassword}>
             <h2>Tạo mật khẩu mới</h2>
-            <p>Chọn mật khẩu có ít nhất 8 ký tự.</p>
+            <p>Mật khẩu cần đáp ứng đầy đủ các yêu cầu dưới đây.</p>
             <label htmlFor="new-password">Mật khẩu mới</label>
             <input
               id="new-password"
               type="password"
               autoComplete="new-password"
-              minLength={8}
+              maxLength={128}
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
               required
@@ -173,12 +179,12 @@ function ChangePasswordPage({ user }) {
               id="confirm-new-password"
               type="password"
               autoComplete="new-password"
-              minLength={8}
+              maxLength={128}
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               required
             />
-            <Notice error={error} />
+            <FormWarning message={error} />
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Đang cập nhật…" : "Hoàn tất đổi mật khẩu"}
             </Button>

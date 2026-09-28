@@ -6,9 +6,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.hashers import make_password, check_password
-from django.contrib.auth.password_validation import validate_password
 from django.core import signing
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import BooleanField, Count, Exists, F, OuterRef, Q, Sum, Value
@@ -256,9 +254,6 @@ def change_password(request):
     if not request.user.check_password(current):
         log_event(logger, logging.WARNING, 'password_change_failed', service='auth', user_id=request.user.pk, error_code='current_password_invalid', status_code=400)
         return error('Mật khẩu hiện tại không chính xác.',400)
-    if len(new)<8:
-        log_event(logger, logging.WARNING, 'password_change_failed', service='auth', user_id=request.user.pk, error_code='password_too_short', status_code=400)
-        return error('Mật khẩu mới cần tối thiểu 8 ký tự.',400)
     request.user.set_password(new);request.user.save(update_fields=['password'])
     log_event(logger, logging.INFO, 'password_changed', service='auth', user_id=request.user.pk)
     return Response({'message':'Đã cập nhật mật khẩu.'})
@@ -388,11 +383,6 @@ def password_reset_complete(request):
         return error('Không tìm thấy tài khoản tương ứng.', 404)
 
     new_password = payload.validated_data['new_password']
-    try:
-        validate_password(new_password, user=user)
-    except DjangoValidationError as exc:
-        return error(' '.join(exc.messages))
-
     user.set_password(new_password)
     user.save(update_fields=['password'])
     # Deleting the verified challenge makes the signed token single-use.
