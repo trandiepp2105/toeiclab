@@ -31,6 +31,7 @@ function PartPracticeRunPage({ partNumber, go }) {
   const [cycleCompleted, setCycleCompleted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const practiceRunRef = useRef(null);
+  const workLayoutRef = useRef(null);
 
   useEffect(() => {
     setLoading(true);
@@ -129,6 +130,38 @@ function PartPracticeRunPage({ partNumber, go }) {
   const listeningLayout = part <= 4;
   const showQuestionPrompt = ![1, 2].includes(part);
   const hasActiveGroup = Boolean(data && currentGroup);
+  const currentQuestionId = currentGroup?.questions?.[0]?.id;
+
+  useEffect(() => {
+    if (!hasActiveGroup || !listeningLayout) return undefined;
+
+    const audio = workLayoutRef.current?.querySelector(".practice-listening-audio audio");
+    if (!audio) return undefined;
+
+    audio.currentTime = 0;
+    const playback = audio.play();
+    playback?.catch?.(() => {
+      // Autoplay can be denied before the browser has received a user gesture.
+    });
+    return undefined;
+  }, [currentQuestionId, hasActiveGroup, listeningLayout, part]);
+
+  useEffect(() => {
+    if (!hasActiveGroup || window.innerWidth > 560) return;
+
+    const target = hasReadingPassage
+      ? workLayoutRef.current?.querySelector(".practice-passage")
+      : listeningImageLayout
+        ? workLayoutRef.current?.querySelector(".practice-listening-image")
+        : null;
+    target?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [
+    currentQuestionId,
+    hasActiveGroup,
+    hasReadingPassage,
+    listeningImageLayout,
+    part,
+  ]);
 
   useEffect(() => {
     // Part 1 uses normal document scrolling rather than a locked split-pane view.
@@ -358,7 +391,7 @@ function PartPracticeRunPage({ partNumber, go }) {
           Bạn đã hoàn thành toàn bộ Part {part}. Hệ thống đã quay lại câu hỏi đầu tiên.
         </div>
       )}
-      <div className={`practice-work-layout ${hasReadingPassage ? "practice-reading-layout" : ""} ${listeningLayout ? "practice-listening-layout" : ""} ${part === 1 ? "practice-part-one-layout" : ""}`}>
+      <div ref={workLayoutRef} className={`practice-work-layout ${hasReadingPassage ? "practice-reading-layout" : ""} ${listeningLayout ? "practice-listening-layout" : ""} ${part === 1 ? "practice-part-one-layout" : ""}`}>
         {hasReadingPassage && (
           <section className="practice-passage">
             <div className="eyebrow">READING PASSAGE · {currentGroup.exam.title}</div>

@@ -850,7 +850,7 @@ body.toeic-part-practice-active .practice-reading-layout .practice-passage {
 }
 
 @media (max-width: 900px) {
-  body.toeic-part-practice-active .practice-work-layout {
+  body.toeic-part-practice-active .part-practice-run .practice-work-layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }
@@ -1075,6 +1075,23 @@ body.toeic-part-practice-active .practice-reading-layout .practice-passage {
 }
 
 @media (max-width: 560px) {
+  body.toeic-part-practice-active .practice-work-layout {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scroll-behavior: smooth;
+  }
+
+  body.toeic-part-practice-active .practice-work-layout > .practice-passage,
+  body.toeic-part-practice-active .practice-work-layout > .practice-listening-media,
+  body.toeic-part-practice-active .practice-work-layout > .practice-question-card {
+    flex: 0 0 auto;
+  }
+
   .part-practice-run .practice-work-layout.practice-reading-layout {
     display: flex;
     flex-direction: column;
