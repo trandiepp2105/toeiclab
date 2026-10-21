@@ -16,7 +16,6 @@ import authService from "./services/authService";
 import dashboardService from "./services/dashboardService";
 import { navItems, Button, Loading } from "./shared/ui";
 import LoginModal from "./components/auth/LoginModal/LoginModal";
-
 import DashboardPage from "./pages/DashboardPage/DashboardPage";
 import VocabularyHomePage from "./pages/VocabularyHomePage/VocabularyHomePage";
 import TopicListPage from "./pages/TopicListPage/TopicListPage";
@@ -37,6 +36,13 @@ import TipsPage from "./pages/TipsPage/TipsPage";
 import AccountPage from "./pages/AccountPage/AccountPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage/ChangePasswordPage";
 import NotFoundPage from "./pages/NotFoundPage/NotFoundPage";
+
+const mobileNavItems = [
+  ["/", "statistic.svg", "Trang chủ"],
+  ["/vocabulary", "vocab.svg", "Từ vựng"],
+  ["/tests", "full-test.svg", "Bài thi"],
+  ["/parts", "practice.svg", "Luyện Part"],
+];
 
 /** Chọn tiêu đề tab trình duyệt theo trang hiện tại. */
 function getPageTitle(pathname) {
@@ -422,6 +428,34 @@ function AppLayout() {
           © 2026 TOEICLab <span>Học thông minh · Thi tự tin</span>
         </footer>
       </main>
+
+      <nav className="mobile-tabbar" aria-label="Điều hướng chính">
+        {mobileNavItems.map(([href, icon, label]) => (
+          <NavLink
+            key={href}
+            to={href}
+            end={href === "/"}
+            className={({ isActive }) =>
+              "mobile-tab" + (isActive ? " active" : "")
+            }
+          >
+            <img src={`/icons/${icon}`} alt="" aria-hidden="true" />
+            <span>{label}</span>
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          className="mobile-tab mobile-tab-more"
+          onClick={() => setMobileNav(true)}
+          aria-label="Mở thêm mục điều hướng"
+          aria-expanded={mobileNav}
+        >
+          <span className="mobile-tab-more-icon" aria-hidden="true">
+            ···
+          </span>
+          <span>Thêm</span>
+        </button>
+      </nav>
 
       {authOpen && (
         <LoginModal onClose={() => setAuthOpen(false)} onUser={setUser} />

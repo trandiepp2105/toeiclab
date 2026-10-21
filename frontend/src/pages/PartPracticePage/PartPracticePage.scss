@@ -152,7 +152,7 @@ body.toeic-part-practice-active .footer {
   body.toeic-part-practice-active .page-content {
     height: calc(100vh - 58px);
     padding-top: 12px;
-    padding-bottom: 12px;
+    padding-bottom: 10px;
   }
 }
 
@@ -446,8 +446,17 @@ body.toeic-part-practice-active .footer {
   display: block;
   max-width: 100%;
   max-height: 320px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   margin: 0 auto 18px;
   border-radius: 8px;
+}
+
+.practice-passage img {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .practice-listening-image .practice-question-image {
@@ -626,6 +635,133 @@ body.toeic-part-practice-active .footer {
 }
 
 @media (max-width: 560px) {
+  /* Put listening audio after the answer controls on narrow screens. */
+  .part-practice-run .practice-work-layout.practice-listening-layout {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .part-practice-run .practice-listening-media {
+    display: contents;
+  }
+
+  .part-practice-run .practice-listening-image {
+    order: 1;
+    align-self: stretch;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0;
+  }
+
+  .part-practice-run .practice-question-card {
+    order: 2;
+    align-self: stretch;
+    width: 100%;
+    box-sizing: border-box;
+    height: auto;
+    overflow: visible;
+  }
+
+  .part-practice-run .practice-listening-audio {
+    order: 3;
+    align-self: stretch;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .part-practice-run .practice-listening-audio .eyebrow {
+    display: none;
+  }
+
+  .part-practice-run .practice-listening-audio .practice-audio-controls {
+    display: block;
+  }
+
+  body.toeic-part-practice-active .practice-work-layout.practice-listening-layout {
+    overflow-y: auto;
+  }
+
+  body.toeic-part-practice-active .practice-listening-media {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.toeic-part-practice-active .practice-question-card {
+    height: auto;
+    overflow: visible;
+  }
+
+  .part-practice-run .practice-run-actions {
+    display: none;
+  }
+
+  /* Part 1 keeps normal page scrolling; let its audio and image size the row naturally. */
+  .part-practice-run .practice-work-layout.practice-part-one-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+
+  .part-practice-run .practice-work-layout.practice-part-one-layout .practice-listening-media {
+    position: static;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .part-practice-run .practice-listening-image {
+    display: block;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .part-practice-run .practice-question-image {
+    display: block;
+    max-width: 100%;
+    max-height: min(38vh, 260px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+
+  .part-practice-run .practice-listening-image .practice-question-image {
+    margin: 8px auto;
+  }
+
+  .part-practice-run .practice-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .part-practice-run .practice-controls > .button:first-child {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .part-practice-run .practice-controls > .button:last-child {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .part-practice-run .practice-controls > .button:nth-child(2):not(:last-child) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .part-practice-run .practice-controls .button {
+    min-width: 0;
+    white-space: nowrap;
+  }
+
   .part-practice-intro,
   .practice-run-header,
   .practice-controls {
@@ -751,40 +887,17 @@ body.toeic-part-practice-active .practice-reading-layout .practice-passage {
 
   body.toeic-part-practice-active .practice-run-header h1 {
     margin: 3px 0;
-    font-size: 16px;
+    font-size: 14px;
     line-height: 1.2;
   }
 
   body.toeic-part-practice-active .practice-run-header p {
-    font-size: 9px;
+    font-size: 8px;
     line-height: 1.3;
   }
 
   body.toeic-part-practice-active .practice-run-actions {
-    width: auto;
-    flex: 0 0 auto;
-    gap: 4px;
-  }
-
-  body.toeic-part-practice-active .practice-timer {
-    min-width: 58px;
-    padding: 5px 6px;
-    border-radius: 7px;
-  }
-
-  body.toeic-part-practice-active .practice-timer small {
-    font-size: 7px;
-  }
-
-  body.toeic-part-practice-active .practice-timer strong {
-    margin-top: 1px;
-    font-size: 13px;
-  }
-
-  body.toeic-part-practice-active .practice-run-actions .button {
-    min-height: 30px;
-    padding: 0 6px;
-    font-size: 8px;
+    display: none;
   }
 
   body.toeic-part-practice-active .practice-progress-bar {
@@ -892,18 +1005,61 @@ body.toeic-part-practice-active .practice-reading-layout .practice-passage {
   }
 
   body.toeic-part-practice-active .practice-controls {
-    align-items: center;
-    flex-direction: row;
-    gap: 4px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
+    gap: 6px;
     padding-top: 6px;
     margin-top: 4px;
   }
 
   body.toeic-part-practice-active .practice-controls .button {
-    min-height: 30px;
-    padding: 0 6px;
-    font-size: 8px;
+    min-width: 0;
+    min-height: 32px;
+    padding: 0 5px;
+    font-size: 9px;
     white-space: nowrap;
+  }
+
+  body.toeic-part-practice-active .practice-controls > .button:first-child {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  body.toeic-part-practice-active .practice-controls > .button:last-child {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  body.toeic-part-practice-active .practice-controls > .button:nth-child(2):not(:last-child) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  body.toeic-part-practice-active .practice-question-image {
+    max-width: 100%;
+    max-height: min(42vh, 300px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+
+  body.toeic-part-practice-active .practice-passage,
+  body.toeic-part-practice-active .practice-question-card,
+  body.toeic-part-practice-active .practice-option,
+  body.toeic-part-practice-active .practice-explanation {
+    font-size: 11px;
+  }
+
+  body.toeic-part-practice-active .practice-question-label {
+    font-size: 10px;
+  }
+
+  .part-practice-run .practice-controls {
+    gap: 6px;
+    padding-top: 2px;
+    margin-top: 0;
+    border-top: 0;
   }
 }
 
@@ -912,14 +1068,108 @@ body.toeic-part-practice-active .practice-reading-layout .practice-passage {
     font-size: 14px;
   }
 
-  body.toeic-part-practice-active .practice-run-actions .button {
-    max-width: 62px;
-    white-space: normal;
-    line-height: 1.1;
-  }
-
   body.toeic-part-practice-active .practice-controls .button {
     padding: 0 4px;
-    font-size: 7px;
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  .part-practice-run .practice-work-layout.practice-reading-layout {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .part-practice-run .practice-reading-layout .practice-passage {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .part-practice-run .practice-reading-layout .practice-question-card {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.toeic-part-practice-active .practice-work-layout.practice-reading-layout {
+    overflow-y: auto;
+  }
+
+  body.toeic-part-practice-active .practice-reading-layout .practice-passage {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .part-practice-run .practice-reading-layout .practice-passage,
+  body.toeic-part-practice-active .practice-reading-layout .practice-passage {
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .practice-part-section {
+    margin: 12px 0;
+  }
+
+  .practice-section-label {
+    margin-bottom: 7px;
+    font-size: 9px;
+  }
+
+  .practice-part-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .practice-part-card {
+    position: relative;
+    min-height: 72px;
+    height: 72px;
+    justify-content: center;
+    padding: 9px;
+    border-radius: 10px;
+  }
+
+  .practice-part-card .practice-part-number {
+    font-size: 8px;
+  }
+
+  .practice-part-card strong {
+    max-width: calc(100% - 42px);
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .practice-part-card p,
+  .part-practice-intro p {
+    display: none;
+  }
+
+  .practice-part-footer {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: auto;
+    margin: 0;
+    font-size: 9px;
+  }
+
+  .practice-part-footer span:first-child {
+    padding: 3px 5px;
+  }
+
+  .part-practice-intro {
+    gap: 8px;
+    padding: 10px;
+    margin-bottom: 14px;
   }
 }

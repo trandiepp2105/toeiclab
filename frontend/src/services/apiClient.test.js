@@ -1,5 +1,9 @@
 import Cookies from "js-cookie";
-import apiClient, { clearTokenPair, saveTokenPair } from "./apiClient";
+import apiClient, {
+  clearTokenPair,
+  getUserFriendlyErrorMessage,
+  saveTokenPair,
+} from "./apiClient";
 
 jest.mock("js-cookie", () => ({
   get: jest.fn(),
@@ -46,5 +50,34 @@ describe("JWT cookie scope", () => {
 
     expect(Cookies.remove).toHaveBeenCalledWith("access", { path: "/" });
     expect(Cookies.remove).toHaveBeenCalledWith("refresh", { path: "/" });
+  });
+});
+
+describe("API error messages", () => {
+  test("does not reduce a development proxy error response to its first letter", () => {
+    const message = getUserFriendlyErrorMessage({
+      response: {
+        data: "Error occurred while trying to proxy: /api/v1/auth/google/",
+      },
+      message: "Request failed with status code 500",
+    });
+
+    expect(message).toBe(
+      "Không kết nối được máy chủ TOEIC Lab. Hãy kiểm tra backend và thử lại.",
+    );
+  });
+
+  test("returns a useful message for a network failure", () => {
+    expect(getUserFriendlyErrorMessage({ message: "Network Error" })).toBe(
+      "Không kết nối được máy chủ TOEIC Lab. Hãy kiểm tra backend và thử lại.",
+    );
+  });
+
+  test("preserves a useful API error message", () => {
+    expect(
+      getUserFriendlyErrorMessage({
+        response: { data: { error: "Thông tin xác thực Google không hợp lệ." } },
+      }),
+    ).toBe("Thông tin xác thực Google không hợp lệ.");
   });
 });

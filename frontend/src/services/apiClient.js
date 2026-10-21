@@ -77,8 +77,24 @@ const notifyRefreshSubscribers = (error, token) => {
  * Axios mặc định chỉ trả về "Request failed with status code ...", vốn không
  * đủ thông tin để người dùng biết cần làm gì tiếp theo.
  */
-const getUserFriendlyErrorMessage = (error) => {
+export const getUserFriendlyErrorMessage = (error) => {
   const payload = error.response?.data;
+
+  if (!error.response) {
+    return "Không kết nối được máy chủ TOEIC Lab. Hãy kiểm tra backend và thử lại.";
+  }
+
+  if (typeof payload === "string") {
+    const message = payload.trim();
+    const isProxyOrHtmlError =
+      /proxy|<!doctype|<html\b/i.test(message) || message.length < 2;
+
+    if (isProxyOrHtmlError) {
+      return "Không kết nối được máy chủ TOEIC Lab. Hãy kiểm tra backend và thử lại.";
+    }
+
+    return message;
+  }
 
   if (typeof payload?.error === "string") return payload.error;
   if (typeof payload?.detail === "string") return payload.detail;

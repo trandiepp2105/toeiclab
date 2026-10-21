@@ -548,18 +548,28 @@ function TestRunPage({ attemptId, go }) {
   };
   const previousTargetIndex = getNavigationTargetIndex("previous");
   const nextTargetIndex = getNavigationTargetIndex("next");
+  const audioPlaybackNextIndex = fullTestAudioPlayback
+    ? getNextAudioQuestionIndex()
+    : null;
+  const audioPlaybackNextTargetIndex = audioPlaybackNextIndex < questions.length
+    ? audioPlaybackNextIndex
+    : null;
   const examControls = (
     <div
-      className={`exam-controls ${controlsInAnswerColumn ? "exam-controls-in-column" : ""}`}
+      className={`exam-controls ${controlsInAnswerColumn ? "exam-controls-in-column" : ""} ${fullTestAudioPlayback ? "mobile-practice-controls" : ""}`}
     >
-      {!fullTestAudioPlayback && (
+      {(!fullTestAudioPlayback || full) && (
         <Button
           kind="outline"
           disabled={previousTargetIndex === null}
           onClick={() => moveToQuestion(previousTargetIndex)}
         >
           <ArrowIcon direction="left" />
-          {passageGroupNavigation ? "Previous Questions" : "Previous Question"}
+          {fullTestAudioPlayback
+            ? "Câu trước"
+            : passageGroupNavigation
+              ? "Previous Questions"
+              : "Previous Question"}
         </Button>
       )}
       <div className="control-center">
@@ -572,7 +582,14 @@ function TestRunPage({ attemptId, go }) {
           {index + 1} / {questions.length}
         </span>
       </div>
-      {fullTestAudioPlayback ? null : nextTargetIndex !== null ? (
+      {fullTestAudioPlayback ? (
+        <Button
+          disabled={audioPlaybackNextTargetIndex === null}
+          onClick={() => moveToQuestion(audioPlaybackNextTargetIndex)}
+        >
+          Câu tiếp theo <ArrowIcon />
+        </Button>
+      ) : nextTargetIndex !== null ? (
         <Button onClick={() => moveToQuestion(nextTargetIndex)}>
           {passageGroupNavigation ? "Next Questions" : "Next Question"} <ArrowIcon />
         </Button>
