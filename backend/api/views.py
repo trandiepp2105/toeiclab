@@ -14,8 +14,8 @@ from django.db.models.functions import Coalesce
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_scope
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -37,7 +37,8 @@ from assessments.services import (
 )
 from assessments.scoring import attempt_time_state, full_test_toeic_result
 from knowledge.models import GrammarNote, PartTip, KnowledgeArticle
-from users.serializers import RegisterOtpRequestSerializer,RegisterOtpVerifySerializer,LoginSerializer,GoogleCredentialSerializer,ChangePasswordSerializer,PasswordResetRequestSerializer,PasswordResetVerifySerializer,PasswordResetCompleteSerializer
+from users.serializers import RegisterOtpRequestSerializer,RegisterOtpVerifySerializer,LoginSerializer,GoogleCredentialSerializer,ChangePasswordSerializer,PasswordResetRequestSerializer,PasswordResetVerifySerializer,PasswordResetCompleteSerializer,ProfileUpdateSerializer
+from .serializers import ExamListQuerySerializer, AttemptQuerySerializer, PracticeQuestionsQuerySerializer, TermListQuerySerializer, PracticeProgressSerializer
 from assessments.serializers import (
     AttemptProgressSerializer,
     StartAttemptSerializer,
@@ -52,6 +53,12 @@ logger = logging.getLogger(__name__)
 User=get_user_model()
 PART_NAMES={1:'Photographs',2:'Question-Response',3:'Conversations',4:'Talks',5:'Incomplete Sentences',6:'Text Completion',7:'Reading Comprehension'}
 def error(message,code=400):return Response({'error':str(message)},status=code)
+def query_params_without_blank(request, *keys):
+    """Treat empty optional query values the same as omitted values."""
+    params=request.query_params.copy()
+    for key in keys:
+        if params.get(key)=='':params.pop(key,None)
+    return params
 def token_pair(user):
     """Create the access/refresh JWT pair returned after authentication."""
     refresh=RefreshToken.for_user(user)
@@ -125,6 +132,7 @@ def health(request):return Response({'status':'ok','service':'toeiclab-api'})
 def csrf(request):return Response({'csrfToken':get_token(request)})
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_scope('auth_otp_request')
 def register_request_otp(request):
     payload=RegisterOtpRequestSerializer(data=request.data)
     if not payload.is_valid():
@@ -185,6 +193,7 @@ def register_verify(request):
     return Response({**token_pair(user),'user':user_json(user)},status=201)
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_scope('auth_login')
 def login_view(request):
     payload=LoginSerializer(data=request.data)
     if not payload.is_valid():
@@ -206,6 +215,7 @@ def login_view(request):
     return Response({**token_pair(user),'user':user_json(user)})
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_scope('auth_google')
 def google_login(request):
     payload=GoogleCredentialSerializer(data=request.data)
     if not payload.is_valid():
@@ -228,6 +238,7 @@ def logout_view(request):
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+@throttle_scope('auth_refresh')
 def refresh_session(request):
     """Exchange a valid refresh JWT for a new access JWT."""
     payload=TokenRefreshSerializer(data=request.data)
@@ -243,7 +254,11 @@ def refresh_session(request):
 @api_view(['GET','PATCH'])
 def me(request):
     if not request.user.is_authenticated:return error('Bạn cần đăng nhập.',401)
-    if request.method=='PATCH':request.user.display_name=str(request.data.get('display_name',''))[:120];request.user.save(update_fields=['display_name'])
+    if request.method=='PATCH':
+        payload=ProfileUpdateSerializer(data=request.data)
+        if not payload.is_valid():return Response(payload.errors,status=400)
+        request.user.display_name=payload.validated_data['display_name']
+        request.user.save(update_fields=['display_name'])
     return Response(user_json(request.user))
 @api_view(['POST'])
 def change_password(request):
@@ -261,6 +276,7 @@ def change_password(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_scope('auth_otp_request')
 def password_reset_request_otp(request):
     """Send a reset OTP without revealing whether an email has an account."""
     payload = PasswordResetRequestSerializer(data=request.data)
@@ -393,23 +409,21 @@ def password_reset_complete(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def exam_list(request):
-    qs=Exam.objects.prefetch_related('parts').order_by('-year','title','external_id');state=request.query_params.get('answers')
+    params=ExamListQuerySerializer(data=query_params_without_blank(request,'answers','year'))
+    if not params.is_valid():return Response(params.errors,status=400)
+    filters=params.validated_data
+    qs=Exam.objects.prefetch_related('parts').order_by('-year','title','external_id');state=filters.get('answers')
     if request.user.is_authenticated:
         qs=qs.annotate(has_attempted=Exists(TestAttempt.objects.filter(exam_id=OuterRef('pk'),user=request.user)))
     else:
         qs=qs.annotate(has_attempted=Value(False,output_field=BooleanField()))
     if state=='complete':qs=qs.filter(question_count=F('answer_count'),question_count__gt=0)
     elif state=='incomplete':qs=qs.exclude(question_count=F('answer_count'))
-    query=request.query_params.get('q','').strip()
+    query=filters.get('q','').strip()
     if query:qs=qs.filter(title__icontains=query)
-    year_query=request.query_params.get('year')
-    if year_query:
-        try:
-            qs=qs.filter(year=int(year_query))
-        except ValueError:
-            return error('year phải là số nguyên.')
-    try:page=max(1,int(request.query_params.get('page',1)));size=min(200,max(1,int(request.query_params.get('page_size',100))))
-    except ValueError:return error('page và page_size phải là số nguyên.')
+    year_query=filters.get('year')
+    if year_query is not None:qs=qs.filter(year=year_query)
+    page=filters['page'];size=filters['page_size']
     count=qs.count()
     payloads=[exam_json(x) for x in qs[(page-1)*size:page*size]]
     groups=group_exam_payloads(payloads)
@@ -422,9 +436,9 @@ def exam_detail(request,exam_slug):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def exam_answer_transcript(request, exam_slug):
-    """Return the read-only answer guide for every question in an exam."""
+    """Return the answer guide to an authenticated user using JWT auth."""
     exam = (
         Exam.objects.prefetch_related(
             'parts__questions__options',
@@ -468,7 +482,10 @@ def part_detail(request,exam_slug,part_number):
     exam=Exam.objects.filter(Q(slug=exam_slug)|Q(external_id=exam_slug)).first()
     if not exam:return error('Không tìm thấy đề.',404)
     qs=Question.objects.filter(exam_part__exam=exam,exam_part__part_number=part_number).select_related('exam_part','passage').prefetch_related('options')
-    selected={};attempt=TestAttempt.objects.filter(pk=request.query_params.get('attempt'),exam=exam).first() if request.query_params.get('attempt') else None
+    params=AttemptQuerySerializer(data=query_params_without_blank(request,'attempt'))
+    if not params.is_valid():return Response(params.errors,status=400)
+    attempt_id=params.validated_data.get('attempt')
+    selected={};attempt=TestAttempt.objects.filter(pk=attempt_id,exam=exam).first() if attempt_id else None
     if attempt and (not attempt.user_id or attempt.user_id==getattr(request.user,'id',None)):selected={a.question_id:a.selected_option for a in attempt.answers.filter(question__in=qs)}
     return Response({'exam':exam_json(exam),'part_number':part_number,'questions':[dict(question_json(q),selected_answer=selected.get(q.pk,'')) for q in qs]})
 
@@ -590,10 +607,13 @@ def practice_part_questions(request, part_number):
     progress = PartPracticeProgress.objects.filter(
         user=request.user, part_number=part_number,
     ).only('last_question_id').first()
-    direction = request.query_params.get('direction', 'around')
-    cursor_id = request.query_params.get('cursor')
+    params = PracticeQuestionsQuerySerializer(data=query_params_without_blank(request,'cursor'))
+    if not params.is_valid():
+        return Response(params.errors, status=400)
+    direction = params.validated_data['direction']
+    cursor_id = params.validated_data.get('cursor')
     cursor = None
-    if cursor_id:
+    if cursor_id is not None:
         cursor = base.select_related('exam_part__exam').filter(pk=cursor_id).first()
         if cursor is None:
             return error('Vị trí câu hỏi không hợp lệ.', 400)
@@ -681,7 +701,10 @@ def practice_part_progress(request, part_number):
         return error('Đăng nhập để lưu tiến độ luyện tập.', 401)
     if part_number not in range(1, 8):
         return error('Part không hợp lệ.', 404)
-    question_id = request.data.get('question_id')
+    payload = PracticeProgressSerializer(data=request.data)
+    if not payload.is_valid():
+        return Response(payload.errors, status=400)
+    question_id = payload.validated_data['question_id']
     question = Question.objects.filter(pk=question_id, exam_part__part_number=part_number).first()
     if not question:
         return error('Vị trí câu hỏi không hợp lệ.', 400)
@@ -765,7 +788,10 @@ def topic_detail(request,slug):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def term_list(request):
-    qs=VocabularyTerm.objects.filter(is_active=True).prefetch_related('assets');topic=request.query_params.get('topic');query=request.query_params.get('q','').strip()
+    params=TermListQuerySerializer(data=query_params_without_blank(request,'topic'))
+    if not params.is_valid():return Response(params.errors,status=400)
+    filters=params.validated_data
+    qs=VocabularyTerm.objects.filter(is_active=True).prefetch_related('assets');topic=filters.get('topic');query=filters.get('q','').strip()
     if topic:qs=qs.filter(topic_terms__topic_id=topic)
     if query:qs=qs.filter(word__icontains=query)
     return Response([term_json(x) for x in qs.distinct()[:1000]])

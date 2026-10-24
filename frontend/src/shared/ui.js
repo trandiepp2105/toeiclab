@@ -1,4 +1,5 @@
 import React from "react";
+import DOMPurify from "dompurify";
 import AudioButton from "../components/common/AudioButton/AudioButton";
 
 const navItems = [
@@ -24,31 +25,23 @@ const partNames = [
  */
 const fmt = (n) => new Intl.NumberFormat("vi-VN").format(n || 0);
 
-/**
- * Loại bỏ các thẻ và thuộc tính có thể thực thi script trước khi
- * render nội dung HTML lấy từ ngân hàng câu hỏi.
- */
+/** Sanitize stored question HTML with the small subset of markup the UI needs. */
 function safeMarkup(value) {
-  const template = document.createElement("template");
-  template.innerHTML = value || "";
-  const executableScheme = ["java", "script:"].join("");
-  template.content
-    .querySelectorAll("script,iframe,object,embed,style,svg")
-    .forEach((node) => node.remove());
-  template.content.querySelectorAll("*").forEach((node) =>
-    Array.from(node.attributes).forEach((attribute) => {
-      const name = attribute.name.toLowerCase();
-      const content = attribute.value.trim().toLowerCase();
-      if (
-        name.startsWith("on") ||
-        (["src", "href", "xlink:href"].includes(name) &&
-          content.startsWith(executableScheme))
-      ) {
-        node.removeAttribute(attribute.name);
-      }
-    }),
-  );
-  return template.innerHTML;
+  return DOMPurify.sanitize(value || "", {
+    ALLOWED_TAGS: [
+      "a", "abbr", "b", "blockquote", "br", "caption", "center", "code",
+      "dd", "del", "div", "dl", "dt", "em", "h1", "h2", "h3", "h4",
+      "h5", "h6", "hr", "i", "img", "li", "ol", "p", "pre", "q", "s",
+      "small", "span", "strong", "sub", "sup", "table", "tbody", "td",
+      "tfoot", "th", "thead", "tr", "u", "ul",
+    ],
+    ALLOWED_ATTR: [
+      "alt", "align", "class", "colspan", "dir", "height", "href", "lang",
+      "rowspan", "scope", "src", "title", "valign", "width",
+    ],
+    ALLOW_ARIA_ATTR: false,
+    ALLOW_DATA_ATTR: false,
+  });
 }
 
 /**

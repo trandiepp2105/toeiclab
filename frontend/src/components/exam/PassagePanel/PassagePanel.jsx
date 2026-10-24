@@ -1,4 +1,5 @@
 import React from "react";
+import { safeMarkup } from "../../../shared/ui";
 
 /**
  * Panel hiển thị passage và tài nguyên hình ảnh của Part 6–7.
@@ -12,7 +13,7 @@ function PassagePanel({ html, assets = [], title = "Đoạn văn" }) {
       {html ? (
         <div
           className="passage-copy"
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: safeMarkup(html) }}
         />
       ) : (
         <div className="passage-copy">Chưa có nội dung passage.</div>

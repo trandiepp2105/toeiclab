@@ -21,11 +21,11 @@ class RegisterOtpVerifySerializer(serializers.Serializer):
 
 class LoginSerializer(serializers.Serializer):
     email=serializers.EmailField()
-    password=serializers.CharField(write_only=True)
+    password=serializers.CharField(write_only=True,max_length=128)
     def validate_email(self,value):return value.strip().lower()
 
 class GoogleCredentialSerializer(serializers.Serializer):
-    credential=serializers.CharField(min_length=20,write_only=True)
+    credential=serializers.CharField(min_length=20,max_length=8192,write_only=True)
 
 class ChangePasswordSerializer(serializers.Serializer):
     current_password=serializers.CharField(write_only=True)
@@ -58,3 +58,6 @@ class ProfileSerializer(serializers.Serializer):
     email=serializers.EmailField(read_only=True)
     display_name=serializers.CharField(max_length=120)
     is_staff=serializers.BooleanField(read_only=True)
+
+class ProfileUpdateSerializer(serializers.Serializer):
+    display_name=serializers.CharField(max_length=120,allow_blank=True,trim_whitespace=True)

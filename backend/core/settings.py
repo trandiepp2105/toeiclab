@@ -11,6 +11,12 @@ ALLOWED_HOSTS = [h for h in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+X_FRAME_OPTIONS = 'DENY'
 
 INSTALLED_APPS = [
     'django.contrib.admin', 'django.contrib.auth', 'django.contrib.contenttypes',
@@ -70,6 +76,22 @@ REST_FRAMEWORK = {'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.a
                   'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
                   'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
                   'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 50,
+                  'DEFAULT_THROTTLE_CLASSES': [
+                      'rest_framework.throttling.AnonRateThrottle',
+                      'rest_framework.throttling.UserRateThrottle',
+                      'rest_framework.throttling.ScopedRateThrottle',
+                  ],
+                  'DEFAULT_THROTTLE_RATES': {
+                      'anon': '300/minute',
+                      'user': '1200/minute',
+                      'auth_login': '10/minute',
+                      'auth_google': '10/minute',
+                      'auth_refresh': '30/minute',
+                      'auth_otp_request': '3/hour',
+                  },
+                  # Nginx is the single trusted reverse proxy and appends the
+                  # connected client address to X-Forwarded-For.
+                  'NUM_PROXIES': 1,
                   'EXCEPTION_HANDLER': 'core.exceptions.api_exception_handler'}
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),

@@ -11,6 +11,19 @@ class SaveAnswersSerializer(serializers.Serializer):
     answers=serializers.DictField(child=serializers.ChoiceField(choices=list('ABCD')))
     check=serializers.BooleanField(required=False,default=False)
 
+    def validate_answers(self, answers):
+        if len(answers) > 250:
+            raise serializers.ValidationError('Mỗi lượt gửi tối đa 250 câu trả lời.')
+        if any(
+            not str(question_id).isascii()
+            or not str(question_id).isdigit()
+            or len(str(question_id)) > 19
+            or int(question_id) < 1
+            for question_id in answers
+        ):
+            raise serializers.ValidationError('Mã câu hỏi phải là số nguyên dương.')
+        return answers
+
 
 class AttemptProgressSerializer(serializers.Serializer):
     """Validate the current zero-based question position for a full test."""
