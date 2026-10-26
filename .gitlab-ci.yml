@@ -4,35 +4,22 @@ stages:
 
 backend-check:
   stage: verify
-  image: python:3.12-slim
-  variables:
-    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  cache:
-    key: backend-pip
-    paths:
-      - .cache/pip
-  before_script:
-    - apt-get update -qq
-    - apt-get install -y --no-install-recommends build-essential default-libmysqlclient-dev pkg-config
-    - rm -rf /var/lib/apt/lists/*
-    - python -m pip install --disable-pip-version-check -r backend/requirements.txt
   script:
-    - cd backend
-    - python manage.py check
+    - >-
+      docker run --rm -v "$CI_PROJECT_DIR:/source:ro" -w /tmp python:3.12-slim
+      sh -c 'apt-get update -qq && apt-get install -y --no-install-recommends
+      build-essential default-libmysqlclient-dev pkg-config >/dev/null &&
+      python -m pip install --disable-pip-version-check -r /source/backend/requirements.txt
+      >/dev/null && cp -a /source/backend /tmp/backend && cd /tmp/backend &&
+      python manage.py check'
 
 frontend-build:
   stage: verify
-  image: node:22-alpine
-  cache:
-    key:
-      files:
-        - frontend/package-lock.json
-    paths:
-      - frontend/.npm/
   script:
-    - cd frontend
-    - npm ci --cache .npm --prefer-offline
-    - npm run build
+    - >-
+      docker run --rm -v "$CI_PROJECT_DIR:/source:ro" -w /tmp node:22-alpine
+      sh -c 'cp -a /source/frontend /tmp/frontend && cd /tmp/frontend &&
+      npm ci --cache /tmp/npm-cache --prefer-offline && npm run build'
 
 deploy-production:
   stage: deploy
