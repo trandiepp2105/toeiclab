@@ -1,0 +1,54 @@
+stages:
+  - verify
+  - deploy
+
+backend-check:
+  stage: verify
+  image: python:3.12-slim
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  cache:
+    key: backend-pip
+    paths:
+      - .cache/pip
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends build-essential default-libmysqlclient-dev pkg-config
+    - rm -rf /var/lib/apt/lists/*
+    - python -m pip install --disable-pip-version-check -r backend/requirements.txt
+  script:
+    - cd backend
+    - python manage.py check
+
+frontend-build:
+  stage: verify
+  image: node:22-alpine
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+    paths:
+      - frontend/.npm/
+  script:
+    - cd frontend
+    - npm ci --cache .npm --prefer-offline
+    - npm run build
+
+deploy-production:
+  stage: deploy
+  tags:
+    - toeiclab-ec2
+  resource_group: toeiclab-production
+  environment:
+    name: production
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - test -n "$DEPLOY_PATH"
+    - test -f "$DEPLOY_PATH/.env"
+    - command -v rsync
+    - command -v docker
+    - rsync -a --exclude='.git/' --exclude='.env' --exclude='data/' --exclude='tmp/' --exclude='**/node_modules/' --exclude='frontend/build/' --exclude='.venv/' "$CI_PROJECT_DIR/" "$DEPLOY_PATH/"
+    - cd "$DEPLOY_PATH"
+    - docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build --remove-orphans
+    - docker compose --env-file .env -f docker/docker-compose.prod.yml exec -T backend python manage.py check
