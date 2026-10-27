@@ -39,7 +39,7 @@ deploy-production:
     - test -f "$DEPLOY_PATH/.env"
     - command -v rsync
     - command -v docker
-    - rsync -a --exclude='.git/' --exclude='.env' --exclude='data/' --exclude='tmp/' --exclude='**/node_modules/' --exclude='frontend/build/' --exclude='.venv/' "$CI_PROJECT_DIR/" "$DEPLOY_PATH/"
+    - rsync -a --no-group --exclude='.git/' --exclude='.env' --exclude='data/' --exclude='tmp/' --exclude='**/node_modules/' --exclude='frontend/build/' --exclude='.venv/' "$CI_PROJECT_DIR/" "$DEPLOY_PATH/"
     - cd "$DEPLOY_PATH"
     - docker compose --env-file .env -f docker/docker-compose.prod.yml up -d --build --remove-orphans
     - docker compose --env-file .env -f docker/docker-compose.prod.yml exec -T backend python manage.py check
