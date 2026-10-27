@@ -1,35 +1,95 @@
 # TOEIC Lab
 
-Ứng dụng học TOEIC theo hướng modular monolith: React/SCSS, Django REST Framework, MySQL, Redis và Nginx. Schema và dữ liệu chuẩn hóa được MySQL nạp từ `mysql/init/*.sql`; media được Nginx mount read-only từ bộ dữ liệu nguồn.
+TOEIC Lab giúp bạn ôn từ vựng, luyện tập từng phần và làm bài thi thử trong cùng một nơi. Theo dõi kết quả sau mỗi lần học để biết phần nào cần luyện thêm.
 
-## Chạy môi trường development
+Trải nghiệm ứng dụng: [toeiclab.io.vn](https://toeiclab.io.vn)
 
-1. Sao chép `.env.example` thành `.env`. Với máy local, giá trị mặc định của Compose đủ để chạy; thay các secret trước khi dùng môi trường chia sẻ.
-2. Từ thư mục `toeiclab`, chạy:
+![Trang luyện tập từng phần với dữ liệu TOEIC Lab](docs/screenshots/part-practice.png)
+
+## Bạn có thể làm gì với TOEIC Lab?
+
+- **Học từ vựng theo chủ đề:** tra cứu 600 từ thiết yếu cùng phiên âm IPA, nghĩa, ví dụ, hình ảnh và audio phát âm.
+- **Tự kiểm tra từ vựng:** làm quiz theo phạm vi đã học, trả lời theo hai chiều Việt → Anh hoặc Anh → Việt, rồi xem lại câu trả lời.
+- **Luyện từng Part:** luyện riêng một trong 7 Part TOEIC, không giới hạn thời gian và có thể kiểm tra đáp án ngay.
+- **Thi thử đầy đủ:** chọn trong ngân hàng 77 đề, làm bài theo thời lượng 120 phút, lưu câu trả lời trong lúc thi và xem điểm theo từng Part sau khi nộp.
+- **Xem lại và cải thiện:** xem lịch sử bài làm, bài chữa và transcript; theo dõi tiến độ luyện tập, độ chính xác và điểm TOEIC ước tính trên trang thống kê.
+- **Ôn kiến thức:** đọc tài liệu ngữ pháp và mẹo làm bài TOEIC.
+
+Bạn có thể xem nội dung học và danh sách đề thi khi chưa đăng nhập. Đăng nhập hoặc tạo tài khoản để lưu bài làm và đồng bộ tiến độ học tập.
+
+## Bắt đầu học
+
+1. Mở trang **Từ vựng** để chọn chủ đề hoặc thử quiz.
+2. Vào **Bài thi đầy đủ** để chọn đề thi thử, hoặc **Luyện tập từng phần** để tập trung vào một kỹ năng.
+3. Đăng nhập để lưu kết quả, xem lịch sử và theo dõi tiến độ trên trang thống kê.
+
+Các mục **Ngữ pháp** và **Mẹo TOEIC** cung cấp tài liệu tham khảo trong lúc ôn tập.
+
+## Triển khai ứng dụng
+
+### Chạy local bằng Docker Compose
+
+Bạn cần Docker Engine hoặc Docker Desktop đang chạy. Thực hiện các lệnh sau từ thư mục `toeiclab`:
+
+1. Tạo file cấu hình local:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Khởi động các dịch vụ:
 
    ```bash
    docker compose -f docker/docker-compose.dev.yml up --build
    ```
 
-3. Mở [http://localhost](http://localhost). Người dùng chỉ truy cập Nginx ở port 80; Nginx định tuyến `/` tới frontend nội bộ port 3000 và `/api/`, `/admin/` tới backend nội bộ port 8000.
-4. Database schema và dữ liệu mẫu được MySQL tự động nạp từ `mysql/init/*.sql` khi volume MySQL được tạo lần đầu. Không cần chạy importer Python. Chi tiết thứ tự file nằm trong [mysql/README.md](mysql/README.md).
+3. Mở [http://localhost](http://localhost).
 
-   Hiện bộ từ có **600 thẻ liên kết trong chủ đề** (một vài từ trùng nội dung được chuẩn hóa thành cùng term).
+Compose chạy frontend, Django API, MySQL, Redis và Nginx. Khi volume MySQL được tạo lần đầu, MySQL tự tạo schema và nạp dữ liệu từ `mysql/init/*.sql`. Xem thứ tự các file nạp tại [mysql/README.md](mysql/README.md).
 
-Development dùng Nginx port `80`. MySQL vẫn expose host port `3307` và Redis `6380` cho mục đích phát triển; Django và React chỉ truy cập qua network nội bộ Docker. OTP hiện in trong response khi `DJANGO_DEBUG=true` và cũng được gửi vào console email backend.
+### Chạy frontend và backend riêng
 
-## Chạy production
+Cách này phù hợp để xem giao diện hoặc phát triển frontend. Frontend chạy bằng Node.js, backend dùng SQLite mặc định.
 
-Điền secret mạnh cho `DJANGO_SECRET_KEY`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD` và domain trong `.env`, sau đó:
+Trong terminal thứ nhất:
+
+```bash
+cd frontend
+npm install
+HOST=0.0.0.0 PORT=3000 API_PROXY_TARGET=http://localhost:8000 npm start
+```
+
+Trong terminal thứ hai:
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate --run-syncdb
+DJANGO_DEBUG=true python manage.py runserver 0.0.0.0:8000
+```
+
+Mở [http://localhost:3000](http://localhost:3000). SQLite mặc định không được nạp bộ dữ liệu MySQL; để xem đầy đủ từ vựng và đề thi, hãy chạy toàn bộ Compose.
+
+### Kiến trúc và cấu hình
+
+- **Frontend:** React, React Router và SCSS; các màn hình gọi API qua `frontend/src/services`.
+- **Backend:** Django REST Framework, tổ chức theo các domain `users`, `content`, `vocabulary`, `learning`, `assessments` và `knowledge`.
+- **Dữ liệu:** MySQL quản lý schema và nội dung qua các script SQL trong `mysql/init`.
+- **Hạ tầng:** Docker Compose chạy Redis cho cache và Nginx làm reverse proxy. Nginx chuyển `/` tới frontend, `/api/` và `/admin/` tới Django.
+
+Trong môi trường development, Nginx dùng cổng `80`, MySQL mở cổng host `3307` và Redis mở cổng `6380`. Frontend và Django chỉ truy cập qua mạng nội bộ Docker. Khi `DJANGO_DEBUG=true`, mã OTP được trả về trong response và in ra console email backend.
+
+### Triển khai production
+
+Điền secret mạnh và domain phù hợp trong `.env`, sau đó chạy:
 
 ```bash
 docker compose --env-file .env -f docker/docker-compose.prod.yml up --build -d
 ```
 
-MySQL tự tạo schema và nạp dữ liệu từ `mysql/init/*.sql` khi volume được tạo
-lần đầu. Không chạy importer Python trong container backend.
-
-Chỉ Nginx publish cổng HTTP; MySQL và Redis ở network nội bộ. Để dùng OTP thật, cấu hình SMTP trong `.env`. Google Sign-In chỉ hiện khi có `GOOGLE_CLIENT_ID` (giá trị đó được dùng lúc build frontend và backend xác minh ID token). Nên đặt TLS ở reverse proxy/load balancer trước khi mở ứng dụng ra Internet.
+Chỉ Nginx publish cổng HTTP; MySQL và Redis ở mạng nội bộ. Cấu hình SMTP để gửi OTP thật. Google Sign-In hoạt động khi `GOOGLE_CLIENT_ID` được cấu hình cho backend và lúc build frontend. Nên đặt TLS ở reverse proxy hoặc load balancer trước khi mở ứng dụng ra Internet.
 
 Tạo tài khoản quản trị Django:
 
@@ -37,17 +97,9 @@ Tạo tài khoản quản trị Django:
 docker compose --env-file .env -f docker/docker-compose.prod.yml exec backend python manage.py createsuperuser
 ```
 
-Admin ở `/admin/`; health check API ở `/api/v1/health/`.
+Admin ở `/admin/`. API docs ở `/api/docs/` (Swagger), `/api/redoc/` (ReDoc), schema tại `/api/schema/` và health check tại `/api/v1/health/`.
 
-API documentation:
-
-- Swagger UI: `/api/docs/`
-- ReDoc: `/api/redoc/`
-- OpenAPI schema: `/api/schema/`
-
-## API / kiểm thử
-
-Các domain Django: `users`, `content`, `vocabulary`, `learning`, `assessments`, `knowledge`; nghiệp vụ ghi/chấm bài ở `services.py`. Frontend chỉ gọi API qua `src/services`.
+### Kiểm tra ứng dụng
 
 ```bash
 cd backend
@@ -57,5 +109,3 @@ cd ../frontend
 npm ci
 npm run build
 ```
-
-Full test dùng 120 phút, lưu câu trả lời theo attempt, tính điểm từng Part và cung cấp review sau khi nộp. Luyện Part không có đồng hồ; có thể kiểm tra đáp án ngay. Quiz từ vựng chỉ tạo câu Việt→Anh hoặc Anh→Việt; audio chỉ nằm trên thẻ từ.

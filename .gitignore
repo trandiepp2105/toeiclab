@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 db.sqlite3
 .env
+/note.txt
 
 # Local data files
 /data/
