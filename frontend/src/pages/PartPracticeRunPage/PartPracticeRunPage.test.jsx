@@ -1,4 +1,6 @@
 import React from "react";
+import { readFileSync } from "fs";
+import path from "path";
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import PartPracticeRunPage from "./PartPracticeRunPage";
@@ -102,5 +104,33 @@ describe("PartPracticeRunPage media behavior", () => {
       block: "start",
     }));
     expect(container.querySelector(".practice-listening-image")).toBeInTheDocument();
+  });
+
+  test("preserves line breaks in answer explanations", async () => {
+    const question = makeQuestion(3);
+    practiceService.getPartQuestions.mockResolvedValue(
+      makePartData([makeGroup(question)]),
+    );
+    practiceService.checkAnswers.mockResolvedValue({
+      checked: [{
+        question_id: 3,
+        is_correct: false,
+        correct_answer: "A",
+        explanation: { reason: "Câu thứ nhất.\nCâu thứ hai." },
+      }],
+    });
+
+    const { container } = render(<PartPracticeRunPage partNumber={5} go={jest.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Chọn đáp án B" }));
+    await screen.findByText(/Câu thứ nhất/);
+
+    expect(container.querySelector(".practice-explanation p").textContent)
+      .toBe("Câu thứ nhất.\nCâu thứ hai.");
+    const styles = readFileSync(
+      path.resolve(__dirname, "../PartPracticePage/PartPracticePage.scss"),
+      "utf8",
+    );
+    expect(styles).toMatch(/\.practice-explanation p\s*\{[^}]*white-space:\s*pre-line;/s);
   });
 });
