@@ -41,7 +41,7 @@ const mobileNavItems = [
   ["/", "statistic.svg", "Trang chủ"],
   ["/vocabulary", "vocab.svg", "Từ vựng"],
   ["/tests", "full-test.svg", "Bài thi"],
-  ["/parts", "practice.svg", "Luyện Part"],
+  ["/parts", "practice.svg", "Luyện tập"],
 ];
 
 /** Chọn tiêu đề tab trình duyệt theo trang hiện tại. */

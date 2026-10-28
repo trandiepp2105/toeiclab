@@ -6,7 +6,7 @@ const navItems = [
   ["/", "statistic.svg", "Thống kê"],
   ["/vocabulary", "vocab.svg", "Từ vựng"],
   ["/tests", "full-test.svg", "Bài thi đầy đủ"],
-  ["/parts", "practice.svg", "Luyện tập từng phần"],
+  ["/parts", "practice.svg", "Luyện tập"],
   ["/history", "history.svg", "Lịch sử"],
   ["/grammar", "grammar.svg", "Ngữ pháp"],
   ["/tips", "tips.svg", "Mẹo TOEIC"],
