@@ -5,6 +5,7 @@ import "../PartPracticePage/PartPracticePage.scss";
 
 const SINGLE_PARTS = new Set([1, 2, 5]);
 const MAX_CACHED_GROUPS = 18;
+const NAVIGATION_DEBOUNCE_MS = 300;
 
 /** Remove the source exam's question number from a standalone question stem. */
 function removeLeadingQuestionNumber(questionTitle) {
@@ -21,6 +22,7 @@ function PartPracticeRunPage({ partNumber, go }) {
   const part = Number(partNumber);
   const [data, setData] = useState(null);
   const [groupIndex, setGroupIndex] = useState(0);
+  const [questionIndex, setQuestionIndex] = useState(0);
   const [windowOffset, setWindowOffset] = useState(0);
   const [answers, setAnswers] = useState({});
   const [results, setResults] = useState({});
@@ -32,11 +34,27 @@ function PartPracticeRunPage({ partNumber, go }) {
   const [fullscreen, setFullscreen] = useState(false);
   const practiceRunRef = useRef(null);
   const workLayoutRef = useRef(null);
+  const navigationTimerRef = useRef(null);
+  const navigationInProgressRef = useRef(false);
+  const navigationHandlersRef = useRef({});
+  const busyRef = useRef(busy);
+  const windowRequestRef = useRef(false);
+
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  useEffect(() => () => window.clearTimeout(navigationTimerRef.current), []);
+
+  useEffect(() => {
+    window.clearTimeout(navigationTimerRef.current);
+  }, [part]);
 
   useEffect(() => {
     setLoading(true);
     setData(null);
     setGroupIndex(0);
+    setQuestionIndex(0);
     setAnswers({});
     setResults({});
     setError("");
@@ -47,7 +65,17 @@ function PartPracticeRunPage({ partNumber, go }) {
       .then((partData) => {
         setData(partData);
         setWindowOffset(partData.question_offset || 0);
-        setGroupIndex(0);
+        const resumeGroupIndex = (partData.groups || []).findIndex((group) =>
+          group.questions.some((question) => question.id === partData.saved_question_id),
+        );
+        const safeGroupIndex = Math.max(0, resumeGroupIndex);
+        const resumeQuestionIndex = resumeGroupIndex >= 0
+          ? partData.groups[resumeGroupIndex].questions.findIndex(
+              (question) => question.id === partData.saved_question_id,
+            )
+          : 0;
+        setGroupIndex(safeGroupIndex);
+        setQuestionIndex(Math.max(0, resumeQuestionIndex));
       })
       .catch((requestError) => setError(requestError.message))
       .finally(() => setLoading(false));
@@ -101,6 +129,9 @@ function PartPracticeRunPage({ partNumber, go }) {
     () => currentGroup?.questions || [],
     [currentGroup],
   );
+  const activeQuestion = currentQuestions[questionIndex] || currentQuestions[0];
+  const activeResult = activeQuestion ? results[activeQuestion.id] : null;
+  const activeQuestionTitle = removeLeadingQuestionNumber(activeQuestion?.title);
   const isSinglePart = SINGLE_PARTS.has(part);
   const answeredCount = currentQuestions.filter(
     (question) => answers[question.id],
@@ -112,7 +143,7 @@ function PartPracticeRunPage({ partNumber, go }) {
   const questionsBeforeCurrentGroup = groups
     .slice(0, groupIndex)
     .reduce((total, group) => total + (group.questions?.length || 0), 0);
-  const currentQuestionStartIndex = windowOffset + questionsBeforeCurrentGroup + 1;
+  const currentQuestionStartIndex = windowOffset + questionsBeforeCurrentGroup + questionIndex + 1;
   const progressLabel = `${currentQuestionStartIndex} / ${totalQuestionCount}`;
   const progressPercent = totalQuestionCount
     ? (currentQuestionStartIndex / totalQuestionCount) * 100
@@ -125,12 +156,12 @@ function PartPracticeRunPage({ partNumber, go }) {
   );
   const hasReadingPassage = [6, 7].includes(part) && Boolean(currentPassage);
 
-  const currentHasImage = Boolean(currentQuestions[0]?.image_files?.length);
+  const currentHasImage = Boolean(activeQuestion?.image_files?.length);
   const listeningImageLayout = part === 1 && currentHasImage;
   const listeningLayout = part <= 4;
   const showQuestionPrompt = ![1, 2].includes(part);
   const hasActiveGroup = Boolean(data && currentGroup);
-  const currentQuestionId = currentGroup?.questions?.[0]?.id;
+  const currentQuestionId = activeQuestion?.id;
 
   useEffect(() => {
     if (!hasActiveGroup || !listeningLayout) return undefined;
@@ -171,22 +202,24 @@ function PartPracticeRunPage({ partNumber, go }) {
     return () => document.body.classList.remove("toeic-part-practice-active");
   }, [hasActiveGroup, part]);
 
-  /** Persist the group's first question so the next visit resumes at this location. */
+  /** Retain the checked group's final question in the legacy progress record. */
   const saveCurrentGroup = (index) => {
-    const questionId = groups[index]?.questions?.[0]?.id;
+    const questions = groups[index]?.questions || [];
+    const questionId = questions[questions.length - 1]?.id;
     if (questionId) {
       practiceService.savePartProgress(part, questionId).catch(() => {});
     }
   };
 
-  /** Fetch another bounded group window only when navigation reaches a loaded edge. */
-  const loadAdjacentWindow = async (direction, navigate = true) => {
+  /** Fetch another bounded group window when navigation reaches a loaded edge. */
+  const loadAdjacentWindow = async (direction) => {
     const edgeGroup = direction === "next" ? groups[groups.length - 1] : groups[0];
     const edgeQuestion = direction === "next"
       ? edgeGroup?.questions?.[edgeGroup.questions.length - 1]
       : edgeGroup?.questions?.[0];
-    if (!edgeQuestion || busy) return false;
+    if (!edgeQuestion || busy || windowRequestRef.current) return false;
 
+    windowRequestRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -209,7 +242,8 @@ function PartPracticeRunPage({ partNumber, go }) {
           groups: combinedGroups.slice(-MAX_CACHED_GROUPS),
         }));
         setWindowOffset((current) => current + removedQuestionCount);
-        if (navigate) setGroupIndex(groups.length - removedGroups);
+        setGroupIndex(groups.length - removedGroups);
+        setQuestionIndex(0);
       } else {
         const combinedGroups = [...nextWindow.groups, ...groups];
         setData((current) => ({
@@ -220,23 +254,18 @@ function PartPracticeRunPage({ partNumber, go }) {
         }));
         setWindowOffset(nextWindow.question_offset);
         setGroupIndex(nextWindow.groups.length - 1);
+        const previousGroup = nextWindow.groups[nextWindow.groups.length - 1];
+        setQuestionIndex(Math.max(0, (previousGroup?.questions?.length || 1) - 1));
       }
       return true;
     } catch (requestError) {
       setError(requestError.message);
       return false;
     } finally {
+      windowRequestRef.current = false;
       setBusy(false);
     }
   };
-
-  useEffect(() => {
-    if (data?.has_next && groups.length && groupIndex >= groups.length - 2) {
-      loadAdjacentWindow("next", false);
-    }
-    // Prefetch only when the current window is nearly consumed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.has_next, groupIndex, groups.length]);
 
   /** Chấm ngay một câu đơn sau khi người dùng chọn đáp án. */
   const chooseSingleAnswer = async (questionId, option) => {
@@ -295,8 +324,14 @@ function PartPracticeRunPage({ partNumber, go }) {
     }
   };
 
-  /** Tiến tiếp một câu/cụm và cập nhật điểm tiếp tục nếu đang ở đầu tiến độ. */
+  /** Activate the next question, loading another ordered window when needed. */
   const moveNext = async () => {
+    if (questionIndex < currentQuestions.length - 1) {
+      setQuestionIndex(questionIndex + 1);
+      setError("");
+      setCycleCompleted(false);
+      return;
+    }
     if (groupIndex === groups.length - 1) {
       const loaded = await loadAdjacentWindow("next");
       if (!loaded && data?.has_next === false) {
@@ -306,12 +341,9 @@ function PartPracticeRunPage({ partNumber, go }) {
           });
           setData(firstWindow);
           setGroupIndex(0);
+          setQuestionIndex(0);
           setWindowOffset(firstWindow.question_offset || 0);
           setCycleCompleted(true);
-          const firstQuestionId = firstWindow.groups[0]?.questions[0]?.id;
-          if (firstQuestionId) {
-            practiceService.savePartProgress(part, firstQuestionId).catch(() => {});
-          }
         } catch (requestError) {
           setError(requestError.message);
         }
@@ -320,13 +352,19 @@ function PartPracticeRunPage({ partNumber, go }) {
     }
     const nextIndex = groupIndex + 1;
     setGroupIndex(nextIndex);
-    saveCurrentGroup(nextIndex);
+    setQuestionIndex(0);
     setError("");
     setCycleCompleted(false);
   };
 
-  /** Quay lại câu/cụm trước để xem lại mà không lùi điểm tiếp tục đã lưu. */
+  /** Activate the previous question, loading the preceding window if needed. */
   const movePrevious = async () => {
+    if (questionIndex > 0) {
+      setQuestionIndex(questionIndex - 1);
+      setError("");
+      setCycleCompleted(false);
+      return;
+    }
     if (groupIndex === 0) {
       const loaded = await loadAdjacentWindow("previous");
       if (!loaded && data?.has_previous === false) return;
@@ -334,9 +372,27 @@ function PartPracticeRunPage({ partNumber, go }) {
     }
     const previousIndex = groupIndex - 1;
     setGroupIndex(previousIndex);
-    saveCurrentGroup(previousIndex);
+    const previousGroup = groups[previousIndex];
+    setQuestionIndex(Math.max(0, (previousGroup?.questions?.length || 1) - 1));
     setError("");
     setCycleCompleted(false);
+  };
+
+  navigationHandlersRef.current = { next: moveNext, previous: movePrevious };
+
+  /** Coalesce repeated arrow clicks so one burst advances only one question. */
+  const scheduleNavigation = (direction) => {
+    window.clearTimeout(navigationTimerRef.current);
+    navigationTimerRef.current = window.setTimeout(async () => {
+      if (navigationInProgressRef.current || busyRef.current) return;
+
+      navigationInProgressRef.current = true;
+      try {
+        await navigationHandlersRef.current[direction]?.();
+      } finally {
+        navigationInProgressRef.current = false;
+      }
+    }, NAVIGATION_DEBOUNCE_MS);
   };
 
   if (loading) return <Loading />;
@@ -417,11 +473,11 @@ function PartPracticeRunPage({ partNumber, go }) {
             {listeningImageLayout && (
               <section className="practice-listening-image panel">
                 <div className="eyebrow">HÌNH ẢNH · PART {part}</div>
-                {currentQuestions[0].image_files.map((src) => (
+                {(activeQuestion?.image_files || []).map((src) => (
                   <img
                     className="practice-question-image"
                     src={src}
-                    alt={`Câu ${currentQuestions[0].number}`}
+                    alt={`Câu ${activeQuestion.number}`}
                     key={src}
                   />
                 ))}
@@ -435,70 +491,66 @@ function PartPracticeRunPage({ partNumber, go }) {
               <span>{answeredCount}/{currentQuestions.length} đã chọn</span>
             </div>
           )}
-          {currentQuestions.map((question) => {
-            const result = results[question.id];
-            const questionTitle = removeLeadingQuestionNumber(question.title);
-            return (
+          {activeQuestion && (
               <section
                 className={`practice-question-block ${isSinglePart ? "practice-single-question" : ""}`}
-                key={question.id}
+                key={activeQuestion.id}
               >
                 {!isSinglePart && (
-                  <div className="practice-question-label">Question {question.number}</div>
+                  <div className="practice-question-label">Question {activeQuestion.number}</div>
                 )}
-                {showQuestionPrompt && !question.passage_id && question.content_html ? (
+                {showQuestionPrompt && !activeQuestion.passage_id && activeQuestion.content_html ? (
                   <div
                     className="practice-question-prompt"
                     dangerouslySetInnerHTML={{
-                      __html: safeMarkup(question.content_html),
+                      __html: safeMarkup(activeQuestion.content_html),
                     }}
                   />
-                ) : showQuestionPrompt && questionTitle ? (
+                ) : showQuestionPrompt && activeQuestionTitle ? (
                   <h3 className="practice-question-prompt">
-                    {questionTitle}
+                    {activeQuestionTitle}
                   </h3>
                 ) : null}
                 <div className="practice-options">
-                  {Object.entries(question.options || {}).map(([letter, text]) => {
-                    const selected = answers[question.id] === letter;
-                    const correct = result?.correct_answer === letter;
-                    const wrong = result && selected && !result.is_correct;
+                  {Object.entries(activeQuestion.options || {}).map(([letter, text]) => {
+                    const selected = answers[activeQuestion.id] === letter;
+                    const correct = activeResult?.correct_answer === letter;
+                    const wrong = activeResult && selected && !activeResult.is_correct;
                     return (
                       <button
                         className={`practice-option ${selected ? "selected" : ""} ${correct ? "correct" : ""} ${wrong ? "wrong" : ""}`}
-                        disabled={Boolean(result) || busy}
+                        disabled={Boolean(activeResult) || busy}
                         aria-label={`Chọn đáp án ${letter}`}
                         key={letter}
                         type="button"
-                        onClick={() => (isSinglePart ? chooseSingleAnswer(question.id, letter) : chooseGroupAnswer(question.id, letter))}
+                        onClick={() => (isSinglePart ? chooseSingleAnswer(activeQuestion.id, letter) : chooseGroupAnswer(activeQuestion.id, letter))}
                       >
                         <span>{letter}</span>
                         <b>
-                          {[1, 2].includes(part) ? (result ? text : "") : text}
+                          {[1, 2].includes(part) ? (activeResult ? text : "") : text}
                         </b>
                       </button>
                     );
                   })}
                 </div>
-                {result && (
-                  <div className={`practice-explanation ${result.is_correct ? "correct" : "wrong"}`}>
-                    <b>{result.is_correct ? "✓ Chính xác" : "✕ Chưa chính xác"}</b>
-                    <p>{result.explanation?.reason || "Chưa có giải thích cho câu này."}</p>
-                    {result.explanation?.tip && <small>Mẹo: {result.explanation.tip}</small>}
+                {activeResult && (
+                  <div className={`practice-explanation ${activeResult.is_correct ? "correct" : "wrong"}`}>
+                    <b>{activeResult.is_correct ? "✓ Chính xác" : "✕ Chưa chính xác"}</b>
+                    <p>{activeResult.explanation?.reason || "Chưa có giải thích cho câu này."}</p>
+                    {activeResult.explanation?.tip && <small>Mẹo: {activeResult.explanation.tip}</small>}
                   </div>
                 )}
               </section>
-            );
-          })}
+          )}
           <Notice error={error} />
           <div className="practice-controls">
-            <Button kind="outline" onClick={movePrevious}><ArrowIcon direction="left" /> Câu trước</Button>
+            <Button kind="outline" disabled={busy} onClick={() => scheduleNavigation("previous")}><ArrowIcon direction="left" /> Câu trước</Button>
             {!isSinglePart && (
               <Button disabled={groupIsChecked || busy} onClick={submitGroup}>
                 {groupIsChecked ? "Đã kiểm tra đáp án" : "Kiểm tra đáp án"}
               </Button>
             )}
-            <Button disabled={busy} onClick={moveNext}>Câu tiếp theo <ArrowIcon /></Button>
+            <Button disabled={busy} onClick={() => scheduleNavigation("next")}>Câu tiếp theo <ArrowIcon /></Button>
           </div>
         </main>
       </div>

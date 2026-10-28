@@ -564,7 +564,13 @@ def practice_part_list(request):
 
 
 PRACTICE_WINDOW_GROUPS = 6
+# This ordering defines the question bank and is shared by cursor paging.
 PRACTICE_ORDER = ('practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk')
+PRACTICE_ORDERING = ('-practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk')
+PRACTICE_REVERSE_ORDERING = tuple(
+    field[1:] if field.startswith('-') else f'-{field}'
+    for field in PRACTICE_ORDERING
+)
 
 
 def practice_cursor_filter(cursor, *, after):
@@ -596,7 +602,7 @@ def practice_group_filter(question, part_number):
 
 @api_view(['GET'])
 def practice_part_questions(request, part_number):
-    """Return a bounded question window and the authenticated user's saved cursor."""
+    """Return a bounded window, resuming at the last completed bank question."""
     if not request.user.is_authenticated:
         return error('Đăng nhập để luyện tập từng Part.', 401)
     if part_number not in range(1, 8):
@@ -604,36 +610,42 @@ def practice_part_questions(request, part_number):
     base = Question.objects.filter(exam_part__part_number=part_number).annotate(
         practice_year=Coalesce('exam_part__exam__year', Value(0)),
     )
-    progress = PartPracticeProgress.objects.filter(
-        user=request.user, part_number=part_number,
-    ).only('last_question_id').first()
     params = PracticeQuestionsQuerySerializer(data=query_params_without_blank(request,'cursor'))
     if not params.is_valid():
         return Response(params.errors, status=400)
     direction = params.validated_data['direction']
     cursor_id = params.validated_data.get('cursor')
     cursor = None
+    completed_question = None
     if cursor_id is not None:
         cursor = base.select_related('exam_part__exam').filter(pk=cursor_id).first()
         if cursor is None:
             return error('Vị trí câu hỏi không hợp lệ.', 400)
-    elif direction != 'first' and progress and progress.last_question_id:
-        cursor = base.select_related('exam_part__exam').filter(pk=progress.last_question_id).first()
+    elif direction != 'first':
+        completed_question_ids = TestAnswer.objects.filter(
+            attempt__user=request.user,
+            attempt__mode='part',
+            attempt__status='submitted',
+            question__exam_part__part_number=part_number,
+            answered_at__isnull=False,
+        ).values('question_id')
+        completed_question = base.filter(
+            pk__in=completed_question_ids,
+        ).order_by(*PRACTICE_REVERSE_ORDERING).first()
+        cursor = completed_question
     if direction not in {'around', 'next', 'previous', 'first'}:
         return error('Hướng tải câu hỏi không hợp lệ.', 400)
     if direction == 'first':
         cursor = None
-    elif cursor is None and progress and progress.last_question_id:
-        cursor = base.select_related('exam_part__exam').filter(pk=progress.last_question_id).first()
     reverse_window = direction == 'previous'
     if cursor is None:
-        candidates = base.order_by('-practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk')[:PRACTICE_WINDOW_GROUPS * 12]
+        candidates = base.order_by(*PRACTICE_ORDERING)[:PRACTICE_WINDOW_GROUPS * 12]
     else:
         condition = practice_cursor_filter(cursor, after=direction != 'previous')
         if direction == 'around':
             condition |= Q(pk=cursor.pk)
         candidates = base.filter(condition).order_by(
-            *(['practice_year', '-exam_part__exam__title', '-exam_part__exam_id', '-number', '-pk'] if reverse_window else ['-practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk'])
+            *(PRACTICE_REVERSE_ORDERING if reverse_window else PRACTICE_ORDERING)
         )[:PRACTICE_WINDOW_GROUPS * 12]
     candidate_rows = list(candidates.select_related('exam_part__exam', 'passage').prefetch_related('options'))
     if reverse_window:
@@ -653,7 +665,7 @@ def practice_part_questions(request, part_number):
     window_questions = list(base.filter(group_query).select_related(
         'exam_part__exam', 'passage',
     ).prefetch_related('options').order_by(
-        '-practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk',
+        *PRACTICE_ORDERING,
     ))
     groups = []
     by_key = {}
@@ -690,13 +702,13 @@ def practice_part_questions(request, part_number):
         'end_cursor': window_questions[-1].pk if window_questions else None,
         'has_previous': question_offset > 0,
         'has_next': bool(window_questions) and question_offset + len(window_questions) < base.count(),
-        'saved_question_id': progress.last_question_id if progress else None,
+        'saved_question_id': completed_question.pk if completed_question else None,
     })
 
 
 @api_view(['PATCH'])
 def practice_part_progress(request, part_number):
-    """Persist the current group cursor for the authenticated learner."""
+    """Persist a legacy per-Part marker for the authenticated learner."""
     if not request.user.is_authenticated:
         return error('Đăng nhập để lưu tiến độ luyện tập.', 401)
     if part_number not in range(1, 8):

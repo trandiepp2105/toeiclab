@@ -24,7 +24,7 @@ class VocabularyQuizAnswer(models.Model):
 
 
 class PartPracticeProgress(models.Model):
-    """Stores the next question group to resume for one user and Part."""
+    """Keeps a legacy per-Part marker; resume position comes from submitted answers."""
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='part_practice_progress')
     part_number = models.PositiveSmallIntegerField()
     last_question = models.ForeignKey(Question, null=True, blank=True, on_delete=models.SET_NULL, related_name='practice_progress')

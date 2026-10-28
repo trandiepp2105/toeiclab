@@ -19,7 +19,7 @@ const practiceService = {
     );
   },
 
-  /** Lưu câu hỏi đầu cụm tại đó người dùng dừng lại. */
+  /** Lưu mốc nhóm câu đã chấm; vị trí tiếp tục lấy từ lịch sử câu đã hoàn thành. */
   savePartProgress(partNumber, questionId) {
     return getResponseData(
       apiClient.patch(`/content/practice/parts/${partNumber}/progress/`, {
