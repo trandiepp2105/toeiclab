@@ -11,10 +11,11 @@ const practiceService = {
   },
 
   /** Lấy cửa sổ câu hỏi quanh vị trí đã lưu hoặc trước/sau một cursor. */
-  getPartQuestions(partNumber, { cursor, direction = "around" } = {}) {
+  getPartQuestions(partNumber, { cursor, direction = "around", signal } = {}) {
     return getResponseData(
       apiClient.get(`/content/practice/parts/${partNumber}/questions/`, {
         params: { ...(cursor ? { cursor } : {}), direction },
+        signal,
       }),
     );
   },

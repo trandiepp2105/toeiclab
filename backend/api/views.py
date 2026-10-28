@@ -563,7 +563,8 @@ def practice_part_list(request):
     ])
 
 
-PRACTICE_WINDOW_GROUPS = 6
+PRACTICE_SINGLE_WINDOW_GROUPS = 6
+PRACTICE_GROUP_WINDOW_GROUPS = 5
 # This ordering defines the question bank and is shared by cursor paging.
 PRACTICE_ORDER = ('practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk')
 PRACTICE_ORDERING = ('-practice_year', 'exam_part__exam__title', 'exam_part__exam_id', 'number', 'pk')
@@ -600,9 +601,16 @@ def practice_group_filter(question, part_number):
     return Q(pk=question.pk)
 
 
+def practice_window_group_count(part_number):
+    """Return the number of question groups in one Part-practice window."""
+    if part_number in PRACTICE_SINGLE_PARTS:
+        return PRACTICE_SINGLE_WINDOW_GROUPS
+    return PRACTICE_GROUP_WINDOW_GROUPS
+
+
 @api_view(['GET'])
 def practice_part_questions(request, part_number):
-    """Return a bounded window, resuming at the last completed bank question."""
+    """Return a bounded window starting at the question after the last completed one."""
     if not request.user.is_authenticated:
         return error('Đăng nhập để luyện tập từng Part.', 401)
     if part_number not in range(1, 8):
@@ -616,7 +624,8 @@ def practice_part_questions(request, part_number):
     direction = params.validated_data['direction']
     cursor_id = params.validated_data.get('cursor')
     cursor = None
-    completed_question = None
+    last_question = None
+    start_question = None
     if cursor_id is not None:
         cursor = base.select_related('exam_part__exam').filter(pk=cursor_id).first()
         if cursor is None:
@@ -629,27 +638,35 @@ def practice_part_questions(request, part_number):
             question__exam_part__part_number=part_number,
             answered_at__isnull=False,
         ).values('question_id')
-        completed_question = base.filter(
+        last_question = base.filter(
             pk__in=completed_question_ids,
         ).order_by(*PRACTICE_REVERSE_ORDERING).first()
-        cursor = completed_question
+        if last_question:
+            start_question = base.select_related('exam_part__exam').filter(
+                practice_cursor_filter(last_question, after=True),
+            ).order_by(*PRACTICE_ORDERING).first()
+            if start_question is None:
+                start_question = base.select_related('exam_part__exam').order_by(
+                    *PRACTICE_ORDERING,
+                ).first()
+            cursor = start_question
     if direction not in {'around', 'next', 'previous', 'first'}:
         return error('Hướng tải câu hỏi không hợp lệ.', 400)
     if direction == 'first':
         cursor = None
     reverse_window = direction == 'previous'
+    window_group_count = practice_window_group_count(part_number)
+    candidate_limit = window_group_count * 12
     if cursor is None:
-        candidates = base.order_by(*PRACTICE_ORDERING)[:PRACTICE_WINDOW_GROUPS * 12]
+        candidates = base.order_by(*PRACTICE_ORDERING)[:candidate_limit]
     else:
         condition = practice_cursor_filter(cursor, after=direction != 'previous')
         if direction == 'around':
             condition |= Q(pk=cursor.pk)
         candidates = base.filter(condition).order_by(
             *(PRACTICE_REVERSE_ORDERING if reverse_window else PRACTICE_ORDERING)
-        )[:PRACTICE_WINDOW_GROUPS * 12]
+        )[:candidate_limit]
     candidate_rows = list(candidates.select_related('exam_part__exam', 'passage').prefetch_related('options'))
-    if reverse_window:
-        candidate_rows.reverse()
     selected_groups = []
     selected_keys = set()
     for question in candidate_rows:
@@ -657,8 +674,12 @@ def practice_part_questions(request, part_number):
         if key not in selected_keys:
             selected_groups.append((key, question))
             selected_keys.add(key)
-            if len(selected_groups) == PRACTICE_WINDOW_GROUPS:
+            if len(selected_groups) == window_group_count:
                 break
+    # Previous candidates arrive closest-first; return the selected groups in
+    # normal bank order so the frontend can navigate them from left to right.
+    if reverse_window:
+        selected_groups.reverse()
     group_query = Q(pk__in=[])
     for _, representative in selected_groups:
         group_query |= practice_group_filter(representative, part_number)
@@ -687,6 +708,9 @@ def practice_part_questions(request, part_number):
             groups.append(group)
         group['questions'].append(practice_questions_json(question, part_number))
     first_question = window_questions[0] if window_questions else None
+    response_start_question_id = (
+        start_question.pk if start_question else first_question.pk if first_question else None
+    )
     question_offset = (
         base.filter(practice_cursor_filter(first_question, after=False)).count()
         if first_question else 0
@@ -702,7 +726,9 @@ def practice_part_questions(request, part_number):
         'end_cursor': window_questions[-1].pk if window_questions else None,
         'has_previous': question_offset > 0,
         'has_next': bool(window_questions) and question_offset + len(window_questions) < base.count(),
-        'saved_question_id': completed_question.pk if completed_question else None,
+        'saved_question_id': last_question.pk if last_question else None,
+        'last_question_id': last_question.pk if last_question else None,
+        'start_question_id': response_start_question_id,
     })
 
 

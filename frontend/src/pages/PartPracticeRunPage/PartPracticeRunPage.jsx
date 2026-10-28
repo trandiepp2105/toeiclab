@@ -4,7 +4,7 @@ import { ArrowIcon, Button, Loading, Notice, partNames, safeMarkup } from "../..
 import "../PartPracticePage/PartPracticePage.scss";
 
 const SINGLE_PARTS = new Set([1, 2, 5]);
-const MAX_CACHED_GROUPS = 18;
+const MAX_CACHED_WINDOWS = 3;
 const NAVIGATION_DEBOUNCE_MS = 300;
 
 /** Remove the source exam's question number from a standalone question stem. */
@@ -21,6 +21,7 @@ function removeLeadingQuestionNumber(questionTitle) {
 function PartPracticeRunPage({ partNumber, go }) {
   const part = Number(partNumber);
   const [data, setData] = useState(null);
+  const [questionWindows, setQuestionWindows] = useState([]);
   const [groupIndex, setGroupIndex] = useState(0);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [windowOffset, setWindowOffset] = useState(0);
@@ -39,6 +40,7 @@ function PartPracticeRunPage({ partNumber, go }) {
   const navigationHandlersRef = useRef({});
   const busyRef = useRef(busy);
   const windowRequestRef = useRef(false);
+  const windowRequestControllerRef = useRef(null);
 
   useEffect(() => {
     busyRef.current = busy;
@@ -51,34 +53,52 @@ function PartPracticeRunPage({ partNumber, go }) {
   }, [part]);
 
   useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
     setData(null);
+    setQuestionWindows([]);
     setGroupIndex(0);
     setQuestionIndex(0);
     setAnswers({});
     setResults({});
     setError("");
     setCycleCompleted(false);
+    setBusy(false);
+    windowRequestRef.current = false;
 
     practiceService
-      .getPartQuestions(part)
+      .getPartQuestions(part, { signal: controller.signal })
       .then((partData) => {
+        if (controller.signal.aborted) return;
         setData(partData);
+        setQuestionWindows(partData.groups?.length ? [partData.groups] : []);
         setWindowOffset(partData.question_offset || 0);
+        const startQuestionId = partData.start_question_id ?? partData.saved_question_id;
         const resumeGroupIndex = (partData.groups || []).findIndex((group) =>
-          group.questions.some((question) => question.id === partData.saved_question_id),
+          group.questions.some((question) => question.id === startQuestionId),
         );
         const safeGroupIndex = Math.max(0, resumeGroupIndex);
         const resumeQuestionIndex = resumeGroupIndex >= 0
           ? partData.groups[resumeGroupIndex].questions.findIndex(
-              (question) => question.id === partData.saved_question_id,
+              (question) => question.id === startQuestionId,
             )
           : 0;
         setGroupIndex(safeGroupIndex);
         setQuestionIndex(Math.max(0, resumeQuestionIndex));
       })
-      .catch((requestError) => setError(requestError.message))
-      .finally(() => setLoading(false));
+      .catch((requestError) => {
+        if (!controller.signal.aborted) setError(requestError.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+      windowRequestControllerRef.current?.abort();
+      windowRequestControllerRef.current = null;
+      windowRequestRef.current = false;
+    };
   }, [part]);
 
   useEffect(() => {
@@ -211,7 +231,7 @@ function PartPracticeRunPage({ partNumber, go }) {
     }
   };
 
-  /** Fetch another bounded group window when navigation reaches a loaded edge. */
+  /** Fetch one bounded question window when navigation reaches a loaded edge. */
   const loadAdjacentWindow = async (direction) => {
     const edgeGroup = direction === "next" ? groups[groups.length - 1] : groups[0];
     const edgeQuestion = direction === "next"
@@ -220,37 +240,63 @@ function PartPracticeRunPage({ partNumber, go }) {
     if (!edgeQuestion || busy || windowRequestRef.current) return false;
 
     windowRequestRef.current = true;
+    const controller = new AbortController();
+    windowRequestControllerRef.current = controller;
     setBusy(true);
     setError("");
     try {
       const nextWindow = await practiceService.getPartQuestions(part, {
         cursor: edgeQuestion.id,
         direction,
+        signal: controller.signal,
       });
+      if (controller.signal.aborted) return false;
       if (!nextWindow.groups.length) return false;
+      const combinedWindows = direction === "next"
+        ? [...questionWindows, nextWindow.groups]
+        : [nextWindow.groups, ...questionWindows];
+      const droppedWindowCount = Math.max(
+        0,
+        combinedWindows.length - MAX_CACHED_WINDOWS,
+      );
+      const keptWindows = direction === "next"
+        ? combinedWindows.slice(droppedWindowCount)
+        : combinedWindows.slice(0, MAX_CACHED_WINDOWS);
+      const droppedWindows = direction === "next"
+        ? combinedWindows.slice(0, droppedWindowCount)
+        : combinedWindows.slice(MAX_CACHED_WINDOWS);
+      const combinedGroups = keptWindows.flat();
+      const droppedQuestionCount = droppedWindows
+        .flat()
+        .reduce((count, group) => count + group.questions.length, 0);
+
+      setQuestionWindows(keptWindows);
       if (direction === "next") {
-        const combinedGroups = [...groups, ...nextWindow.groups];
-        const removedGroups = Math.max(0, combinedGroups.length - MAX_CACHED_GROUPS);
-        const removedQuestionCount = combinedGroups
-          .slice(0, removedGroups)
-          .reduce((count, group) => count + group.questions.length, 0);
+        const firstGroup = combinedGroups[0];
+        const lastGroup = combinedGroups[combinedGroups.length - 1];
         setData((current) => ({
           ...current,
           ...nextWindow,
-          question_offset: current.question_offset + removedQuestionCount,
-          has_previous: current.has_previous || removedGroups > 0,
-          groups: combinedGroups.slice(-MAX_CACHED_GROUPS),
+          question_offset: current.question_offset + droppedQuestionCount,
+          start_cursor: firstGroup?.questions?.[0]?.id || null,
+          end_cursor: lastGroup?.questions?.[lastGroup.questions.length - 1]?.id || null,
+          has_previous: current.has_previous || droppedWindowCount > 0,
+          groups: combinedGroups,
         }));
-        setWindowOffset((current) => current + removedQuestionCount);
-        setGroupIndex(groups.length - removedGroups);
+        setWindowOffset((current) => current + droppedQuestionCount);
+        setGroupIndex(combinedGroups.length - nextWindow.groups.length);
         setQuestionIndex(0);
       } else {
-        const combinedGroups = [...nextWindow.groups, ...groups];
+        const firstGroup = combinedGroups[0];
+        const lastGroup = combinedGroups[combinedGroups.length - 1];
         setData((current) => ({
           ...current,
           ...nextWindow,
-          has_next: current.has_next,
-          groups: combinedGroups.slice(0, MAX_CACHED_GROUPS),
+          question_offset: nextWindow.question_offset,
+          start_cursor: firstGroup?.questions?.[0]?.id || null,
+          end_cursor: lastGroup?.questions?.[lastGroup.questions.length - 1]?.id || null,
+          has_next: current.has_next || droppedWindowCount > 0,
+          groups: combinedGroups,
         }));
         setWindowOffset(nextWindow.question_offset);
         setGroupIndex(nextWindow.groups.length - 1);
@@ -259,11 +305,14 @@ function PartPracticeRunPage({ partNumber, go }) {
       }
       return true;
     } catch (requestError) {
-      setError(requestError.message);
+      if (!controller.signal.aborted) setError(requestError.message);
       return false;
     } finally {
-      windowRequestRef.current = false;
-      setBusy(false);
+      if (windowRequestControllerRef.current === controller) {
+        windowRequestRef.current = false;
+        windowRequestControllerRef.current = null;
+        if (!controller.signal.aborted) setBusy(false);
+      }
     }
   };
 
@@ -335,17 +384,30 @@ function PartPracticeRunPage({ partNumber, go }) {
     if (groupIndex === groups.length - 1) {
       const loaded = await loadAdjacentWindow("next");
       if (!loaded && data?.has_next === false) {
+        const controller = new AbortController();
+        windowRequestRef.current = true;
+        windowRequestControllerRef.current = controller;
+        setBusy(true);
         try {
           const firstWindow = await practiceService.getPartQuestions(part, {
             direction: "first",
+            signal: controller.signal,
           });
+          if (controller.signal.aborted) return;
           setData(firstWindow);
+          setQuestionWindows(firstWindow.groups?.length ? [firstWindow.groups] : []);
           setGroupIndex(0);
           setQuestionIndex(0);
           setWindowOffset(firstWindow.question_offset || 0);
           setCycleCompleted(true);
         } catch (requestError) {
-          setError(requestError.message);
+          if (!controller.signal.aborted) setError(requestError.message);
+        } finally {
+          if (windowRequestControllerRef.current === controller) {
+            windowRequestControllerRef.current = null;
+            windowRequestRef.current = false;
+            if (!controller.signal.aborted) setBusy(false);
+          }
         }
       }
       return;
