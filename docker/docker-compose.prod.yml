@@ -7,6 +7,13 @@ services:
         REACT_APP_API_BASE_URL: /api/v1
         REACT_APP_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     restart: unless-stopped
+  admin:
+    build:
+      context: ../admin
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_BASE_URL: /api/v1
+    restart: unless-stopped
   backend:
     build:
       context: ..
@@ -70,7 +77,7 @@ services:
       - ../data/directions:/data/directions:ro
       - static_data:/data/django-static:ro
       - media_data:/data/media:ro
-    depends_on: [frontend, backend]
+    depends_on: [frontend, admin, backend]
     restart: unless-stopped
 volumes:
   mysql_data:

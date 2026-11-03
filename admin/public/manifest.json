@@ -1,0 +1,12 @@
+{
+  "short_name": "TOEICLab Admin",
+  "name": "TOEIC Lab — Quản trị ứng dụng",
+  "icons": [
+    { "src": "logo192.png?v=20261030-1", "type": "image/png", "sizes": "192x192" },
+    { "src": "logo512.png?v=20261030-1", "type": "image/png", "sizes": "512x512" }
+  ],
+  "start_url": "/manage/",
+  "display": "standalone",
+  "theme_color": "#142a48",
+  "background_color": "#ffffff"
+}

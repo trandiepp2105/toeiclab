@@ -1,7 +1,8 @@
-from django.urls import path
+from django.urls import include, path
 from . import views
 
 urlpatterns=[
+ path('admin/', include('api.admin_urls')),
  path('health/',views.health), path('auth/csrf/',views.csrf), path('auth/register/request-otp/',views.register_request_otp),path('auth/register/verify/',views.register_verify),path('auth/login/',views.login_view),path('auth/google/',views.google_login),path('auth/password-reset/request-otp/',views.password_reset_request_otp),path('auth/password-reset/verify-otp/',views.password_reset_verify_otp),path('auth/password-reset/complete/',views.password_reset_complete),path('auth/refresh-token/',views.refresh_session),path('auth/logout/',views.logout_view),path('auth/me/',views.me),path('users/me/',views.me),path('users/me/change-password/',views.change_password),
  path('content/exams/',views.exam_list),path('content/exams/<slug:exam_slug>/',views.exam_detail),path('content/exams/<slug:exam_slug>/answers-transcripts/',views.exam_answer_transcript),path('content/exams/<slug:exam_slug>/parts/',views.exam_parts),path('content/exams/<slug:exam_slug>/parts/<int:part_number>/',views.part_detail),path('content/questions/<int:question_id>/',views.question_detail),path('content/practice/parts/',views.practice_part_list),path('content/practice/parts/<int:part_number>/questions/',views.practice_part_questions),path('content/practice/parts/<int:part_number>/progress/',views.practice_part_progress),path('content/practice/check/',views.practice_check_answers),
  path('vocabulary/topics/',views.topic_list),path('vocabulary/topics/<slug:slug>/',views.topic_detail),path('vocabulary/terms/',views.term_list),path('vocabulary/terms/<int:term_id>/',views.term_detail),

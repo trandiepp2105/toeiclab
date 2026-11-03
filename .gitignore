@@ -5,6 +5,10 @@ db.sqlite3
 .env
 /note.txt
 
+# Admin React build artifacts
+/admin/node_modules/
+/admin/build/
+
 # Local data files
 /data/
 /backend/logs/

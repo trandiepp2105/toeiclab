@@ -19,7 +19,7 @@ def start_attempt(*, exam_id, user, mode='full', selected_parts=None, time_limit
     """Create an authenticated attempt and freeze its selected exam parts."""
     if not getattr(user, 'is_authenticated', False):
         raise ValueError('Đăng nhập để bắt đầu làm bài thi.')
-    exam=Exam.objects.get(external_id=str(exam_id))
+    exam=Exam.objects.get(external_id=str(exam_id), status='published')
 
     if mode == 'full':
         # Serializing full-test creation per user prevents two browser requests

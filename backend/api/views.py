@@ -75,6 +75,7 @@ def user_json(user):
         'display_name': user.display_name,
         'email_verified': user.email_verified,
         'is_staff': user.is_staff,
+        'permissions': sorted(user.get_admin_permission_codes()),
     }
 def term_json(term):
     assets={x.asset_role:asset_url(x.storage_path) for x in term.assets.all()}
@@ -412,7 +413,7 @@ def exam_list(request):
     params=ExamListQuerySerializer(data=query_params_without_blank(request,'answers','year'))
     if not params.is_valid():return Response(params.errors,status=400)
     filters=params.validated_data
-    qs=Exam.objects.prefetch_related('parts').order_by('-year','title','external_id');state=filters.get('answers')
+    qs=Exam.objects.filter(status='published').prefetch_related('parts').order_by('-year','title','external_id');state=filters.get('answers')
     if request.user.is_authenticated:
         qs=qs.annotate(has_attempted=Exists(TestAttempt.objects.filter(exam_id=OuterRef('pk'),user=request.user)))
     else:
@@ -431,7 +432,7 @@ def exam_list(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def exam_detail(request,exam_slug):
-    obj=Exam.objects.prefetch_related('parts').filter(Q(slug=exam_slug)|Q(external_id=exam_slug)).first()
+    obj=Exam.objects.filter(status='published').prefetch_related('parts').filter(Q(slug=exam_slug)|Q(external_id=exam_slug)).first()
     return Response(exam_json(obj, include_readiness=True)) if obj else error('Không tìm thấy đề.',404)
 
 
@@ -440,7 +441,7 @@ def exam_detail(request,exam_slug):
 def exam_answer_transcript(request, exam_slug):
     """Return the answer guide to an authenticated user using JWT auth."""
     exam = (
-        Exam.objects.prefetch_related(
+        Exam.objects.filter(status='published').prefetch_related(
             'parts__questions__options',
             'parts__questions__passage',
         )
@@ -473,13 +474,13 @@ def exam_answer_transcript(request, exam_slug):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def exam_parts(request,exam_slug):
-    exam=Exam.objects.filter(Q(slug=exam_slug)|Q(external_id=exam_slug)).first()
+    exam=Exam.objects.filter(status='published').filter(Q(slug=exam_slug)|Q(external_id=exam_slug)).first()
     if not exam:return error('Không tìm thấy đề.',404)
     return Response([{'number':p.part_number,'title':p.title,'name':PART_NAMES.get(p.part_number),'question_count':p.question_count} for p in exam.parts.all()])
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def part_detail(request,exam_slug,part_number):
-    exam=Exam.objects.filter(Q(slug=exam_slug)|Q(external_id=exam_slug)).first()
+    exam=Exam.objects.filter(status='published').filter(Q(slug=exam_slug)|Q(external_id=exam_slug)).first()
     if not exam:return error('Không tìm thấy đề.',404)
     qs=Question.objects.filter(exam_part__exam=exam,exam_part__part_number=part_number).select_related('exam_part','passage').prefetch_related('options')
     params=AttemptQuerySerializer(data=query_params_without_blank(request,'attempt'))
@@ -538,7 +539,7 @@ def practice_part_list(request):
 
     counts = {
         row['part_number']: row['question_count']
-        for row in ExamPart.objects.values('part_number').annotate(
+        for row in ExamPart.objects.filter(exam__status='published').values('part_number').annotate(
             question_count=Sum('question_count'),
         )
     }
@@ -615,7 +616,10 @@ def practice_part_questions(request, part_number):
         return error('Đăng nhập để luyện tập từng Part.', 401)
     if part_number not in range(1, 8):
         return error('Part không hợp lệ.', 404)
-    base = Question.objects.filter(exam_part__part_number=part_number).annotate(
+    base = Question.objects.filter(
+        exam_part__part_number=part_number,
+        exam_part__exam__status='published',
+    ).annotate(
         practice_year=Coalesce('exam_part__exam__year', Value(0)),
     )
     params = PracticeQuestionsQuerySerializer(data=query_params_without_blank(request,'cursor'))
@@ -811,7 +815,7 @@ def practice_check_answers(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def question_detail(request,question_id):
-    q=Question.objects.select_related('exam_part','passage').prefetch_related('options').filter(pk=question_id).first()
+    q=Question.objects.select_related('exam_part','passage').prefetch_related('options').filter(pk=question_id,exam_part__exam__status='published').first()
     return Response(question_json(q)) if q else error('Không tìm thấy câu hỏi.',404)
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -856,14 +860,20 @@ def dashboard_summary(request):
     if not request.user.is_authenticated:
         return error('Đăng nhập để xem thống kê kết quả luyện tập.', 401)
 
+    return Response(dashboard_summary_data(request.user))
+
+
+def dashboard_summary_data(user):
+    """Build the same dashboard payload for an arbitrary user account."""
+
     topics = list(
         VocabularyTopic.objects.filter(is_published=True).prefetch_related('topic_terms')
     )
-    quiz_rows = VocabularyQuizAttempt.objects.filter(user=request.user).filter(
+    quiz_rows = VocabularyQuizAttempt.objects.filter(user=user).filter(
         Q(status='submitted') | Q(answers__answered_at__isnull=False),
     ).distinct()
     quiz_answers = VocabularyQuizAnswer.objects.filter(
-        attempt__user=request.user,
+        attempt__user=user,
         answered_at__isnull=False,
     )
     quiz_question_count = quiz_answers.count()
@@ -876,7 +886,7 @@ def dashboard_summary(request):
         )
     }
     part_score_rows = PartScore.objects.filter(
-        attempt__user=request.user,
+        attempt__user=user,
         attempt__status='submitted',
     ).values('exam_part__part_number').annotate(
         answered_count=Sum('answered_count'),
@@ -911,10 +921,10 @@ def dashboard_summary(request):
     )[:2]
     submitted_attempts = list(
         TestAttempt.objects.filter(
-            user=request.user,
+            user=user,
             status='submitted',
             mode='full',
-        ).prefetch_related('part_scores__exam_part').order_by('-submitted_at')[:10]
+        ).select_related('exam').prefetch_related('part_scores__exam_part').order_by('-submitted_at')[:10]
     )
     latest_attempt = submitted_attempts[0] if submitted_attempts else None
     latest_score = (
@@ -922,9 +932,9 @@ def dashboard_summary(request):
         if latest_attempt
         else None
     )
-    latest_exam = Exam.objects.order_by('-year', '-created_at', 'title').first()
+    latest_exam = Exam.objects.filter(status='published').order_by('-year', '-created_at', 'title').first()
 
-    return Response({
+    return {
         'parts': parts,
         'vocabulary': {
             'total_count': VocabularyTerm.objects.filter(is_active=True).count(),
@@ -941,6 +951,10 @@ def dashboard_summary(request):
             'target_progress': round(latest_score['total_score'] / 900 * 100)
             if latest_score and latest_score.get('is_valid') else 0,
         },
+        'latest_full_test': {
+            'exam_title': latest_attempt.exam.title,
+            'submitted_at': latest_attempt.submitted_at,
+        } if latest_attempt else None,
         'recommendations': [
             {
                 'part_number': part['part_number'],
@@ -951,20 +965,20 @@ def dashboard_summary(request):
         ],
         'latest_exam': exam_json(latest_exam) if latest_exam else None,
         'submitted_test_count': TestAttempt.objects.filter(
-            user=request.user,
+            user=user,
             status='submitted',
         ).count(),
         'full_test_count': TestAttempt.objects.filter(
-            user=request.user,
+            user=user,
             status='submitted',
             mode='full',
         ).count(),
         'part_practice_count': TestAttempt.objects.filter(
-            user=request.user,
+            user=user,
             status='submitted',
             mode__in=['part', 'subset'],
         ).count(),
-    })
+    }
 
 
 @api_view(['GET'])

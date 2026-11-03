@@ -90,7 +90,7 @@ CREATE TABLE `users_otpchallenge` (`id` bigint AUTO_INCREMENT NOT NULL PRIMARY K
 --
 -- Create model User
 --
-CREATE TABLE `users_user` (`password` varchar(128) NOT NULL, `last_login` datetime(6) NULL, `is_superuser` bool NOT NULL, `first_name` varchar(150) NOT NULL, `last_name` varchar(150) NOT NULL, `is_staff` bool NOT NULL, `is_active` bool NOT NULL, `date_joined` datetime(6) NOT NULL, `id` char(32) NOT NULL PRIMARY KEY, `email` varchar(254) NOT NULL UNIQUE, `display_name` varchar(120) NOT NULL, `email_verified` bool NOT NULL);
+CREATE TABLE `users_user` (`password` varchar(128) NOT NULL, `last_login` datetime(6) NULL, `is_superuser` bool NOT NULL, `first_name` varchar(150) NOT NULL, `last_name` varchar(150) NOT NULL, `is_active` bool NOT NULL, `date_joined` datetime(6) NOT NULL, `id` char(32) NOT NULL PRIMARY KEY, `email` varchar(254) NOT NULL UNIQUE, `display_name` varchar(120) NOT NULL, `email_verified` bool NOT NULL);
 CREATE TABLE `users_user_groups` (`id` bigint AUTO_INCREMENT NOT NULL PRIMARY KEY, `user_id` char(32) NOT NULL, `group_id` integer NOT NULL);
 CREATE TABLE `users_user_user_permissions` (`id` bigint AUTO_INCREMENT NOT NULL PRIMARY KEY, `user_id` char(32) NOT NULL, `permission_id` integer NOT NULL);
 --

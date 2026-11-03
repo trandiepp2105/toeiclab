@@ -12,6 +12,19 @@ services:
       - ../.env
     volumes:
       - ../frontend:/app
+  admin:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c 'npm install --legacy-peer-deps && npm start'
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3000
+      - WDS_SOCKET_PORT=0
+      - WDS_SOCKET_PATH=/manage/ws
+      - PUBLIC_URL=/manage
+      - REACT_APP_API_BASE_URL=/api/v1
+    volumes:
+      - ../admin:/app
   backend:
     build:
       context: ..
@@ -74,7 +87,7 @@ services:
       - ../data/directions:/data/directions:ro
       - static_data:/data/django-static:ro
       - media_data:/data/media:ro
-    depends_on: [frontend, backend]
+    depends_on: [frontend, admin, backend]
 volumes:
   mysql_data:
   redis_data:
