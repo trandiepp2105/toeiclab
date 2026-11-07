@@ -1,27 +1,50 @@
 """Validated write contracts for assessment attempts."""
+
 from rest_framework import serializers
 
+
 class StartAttemptSerializer(serializers.Serializer):
-    exam_id=serializers.CharField(max_length=80)
-    mode=serializers.ChoiceField(choices=['full','part','subset'],default='full')
-    selected_parts=serializers.ListField(child=serializers.IntegerField(min_value=1,max_value=7),required=False,default=list)
-    time_limit_seconds=serializers.IntegerField(min_value=300,max_value=7200,required=False,allow_null=True)
+    exam_id = serializers.CharField(max_length=80)
+    mode = serializers.ChoiceField(
+        choices=["full", "part", "subset"],
+        default="full",
+    )
+    selected_parts = serializers.ListField(
+        child=serializers.IntegerField(min_value=1, max_value=7),
+        required=False,
+        default=list,
+    )
+    time_limit_seconds = serializers.IntegerField(
+        min_value=300,
+        max_value=7200,
+        required=False,
+        allow_null=True,
+    )
+
 
 class SaveAnswersSerializer(serializers.Serializer):
-    answers=serializers.DictField(child=serializers.ChoiceField(choices=list('ABCD')))
-    check=serializers.BooleanField(required=False,default=False)
+    answers = serializers.DictField(
+        child=serializers.ChoiceField(choices=list("ABCD")),
+    )
+    check = serializers.BooleanField(required=False, default=False)
 
     def validate_answers(self, answers):
         if len(answers) > 250:
-            raise serializers.ValidationError('Mỗi lượt gửi tối đa 250 câu trả lời.')
-        if any(
+            raise serializers.ValidationError(
+                "Mỗi lượt gửi tối đa 250 câu trả lời."
+            )
+
+        has_invalid_id = any(
             not str(question_id).isascii()
             or not str(question_id).isdigit()
             or len(str(question_id)) > 19
             or int(question_id) < 1
             for question_id in answers
-        ):
-            raise serializers.ValidationError('Mã câu hỏi phải là số nguyên dương.')
+        )
+        if has_invalid_id:
+            raise serializers.ValidationError(
+                "Mã câu hỏi phải là số nguyên dương."
+            )
         return answers
 
 

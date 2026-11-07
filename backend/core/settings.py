@@ -65,9 +65,14 @@ AUTH_PASSWORD_VALIDATORS = [{'NAME': 'django.contrib.auth.password_validation.Us
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'}]
-LANGUAGE_CODE = 'vi-vn'; TIME_ZONE = 'Asia/Ho_Chi_Minh'; USE_I18N = True; USE_TZ = True
-STATIC_URL = '/django-static/'; STATIC_ROOT = BASE_DIR / 'staticfiles'
-MEDIA_URL = '/media/'; MEDIA_ROOT = Path(os.getenv('MEDIA_ROOT', BASE_DIR / 'media'))
+LANGUAGE_CODE = 'vi-vn'
+TIME_ZONE = 'Asia/Ho_Chi_Minh'
+USE_I18N = True
+USE_TZ = True
+STATIC_URL = '/django-static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = Path(os.getenv('MEDIA_ROOT', BASE_DIR / 'media'))
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [v for v in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',') if v]
 CORS_ALLOW_CREDENTIALS = True
@@ -108,9 +113,15 @@ SPECTACULAR_SETTINGS = {
 }
 CACHES = {'default': {'BACKEND': 'django.core.cache.backends.redis.RedisCache', 'LOCATION': os.getenv('REDIS_URL', 'redis://redis:6379/1')}} if os.getenv('REDIS_URL') else {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = os.getenv('EMAIL_HOST', ''); EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', ''); EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() == 'true'; DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'TOEIC Lab <no-reply@toeiclab.local>')
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() == 'true'
+DEFAULT_FROM_EMAIL = os.getenv(
+    'DEFAULT_FROM_EMAIL',
+    'TOEIC Lab <no-reply@toeiclab.local>',
+)
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 API_SLOW_REQUEST_MS = int(os.getenv('API_SLOW_REQUEST_MS', '1000'))
 LOG_FILE = Path(os.getenv('DJANGO_LOG_FILE', BASE_DIR / 'logs' / 'toeiclab.log'))

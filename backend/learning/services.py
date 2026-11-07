@@ -1,11 +1,15 @@
 """Vocabulary progress and quiz construction workflows."""
-from datetime import timedelta
 import random
+
+from datetime import timedelta
+
 from django.db import transaction
-from django.utils import timezone
 from django.db.models.functions import TruncDate
+from django.utils import timezone
+
 from assessments.models import TestAnswer
 from vocabulary.models import VocabularyTerm, VocabularyTopic
+
 from .models import VocabularyProgress, VocabularyQuizAttempt, VocabularyQuizAnswer
 
 
@@ -63,25 +67,87 @@ def calculate_study_streak(*, user, today=None):
     }
 
 @transaction.atomic
-def create_quiz(*, user, scope='all', topic_id=None, question_count=10, question_types=None):
+def create_quiz(
+    *,
+    user,
+    scope="all",
+    topic_id=None,
+    question_count=10,
+    question_types=None,
+):
     """Build randomized bilingual questions; audio is never a quiz mode."""
-    if question_count not in (10,20,30): raise ValueError('Số câu chỉ có thể là 10, 20 hoặc 30.')
-    question_types=question_types or ['vi_to_en','en_to_vi']
-    if not question_types or any(t not in ('vi_to_en','en_to_vi') for t in question_types): raise ValueError('Loại câu hỏi không hợp lệ.')
-    terms=VocabularyTerm.objects.filter(is_active=True)
-    if scope=='topic': terms=terms.filter(topic_terms__topic_id=topic_id).distinct()
-    elif scope=='review': terms=terms.filter(progress_records__user=user).exclude(progress_records__status='learned')
-    terms=list(terms); random.shuffle(terms); terms=terms[:min(question_count,len(terms))]
-    if not terms: raise ValueError('Không có từ phù hợp với lựa chọn này.')
-    attempt=VocabularyQuizAttempt.objects.create(user=user,scope=scope,topic_id=topic_id if scope=='topic' else None,question_type='mixed',question_count=len(terms))
-    all_terms=list(VocabularyTerm.objects.filter(is_active=True).values_list('word','meaning_vi')); rows=[]
-    for i,term in enumerate(terms,1):
-        typ=random.choice(question_types); correct=term.word if typ=='vi_to_en' else term.meaning_vi
-        distractors=[x[0 if typ=='vi_to_en' else 1] for x in all_terms if x[0]!=term.word and x[1]!=term.meaning_vi]
-        options=random.sample(distractors,min(3,len(distractors)))+[correct]; random.shuffle(options)
-        rows.append(VocabularyQuizAnswer(attempt=attempt,term=term,prompt_type=typ,options_json=options,correct_value=correct,position=i))
-        VocabularyProgress.objects.get_or_create(user=user,term=term)
-    VocabularyQuizAnswer.objects.bulk_create(rows); return attempt
+    if question_count not in (10, 20, 30):
+        raise ValueError("Số câu chỉ có thể là 10, 20 hoặc 30.")
+
+    question_types = question_types or ["vi_to_en", "en_to_vi"]
+    valid_question_types = {"vi_to_en", "en_to_vi"}
+    if not question_types or any(
+        question_type not in valid_question_types
+        for question_type in question_types
+    ):
+        raise ValueError("Loại câu hỏi không hợp lệ.")
+
+    terms_query = VocabularyTerm.objects.filter(is_active=True)
+    if scope == "topic":
+        terms_query = terms_query.filter(
+            topic_terms__topic_id=topic_id,
+        ).distinct()
+    elif scope == "review":
+        terms_query = terms_query.filter(
+            progress_records__user=user,
+        ).exclude(progress_records__status="learned")
+
+    terms = list(terms_query)
+    random.shuffle(terms)
+    terms = terms[: min(question_count, len(terms))]
+    if not terms:
+        raise ValueError("Không có từ phù hợp với lựa chọn này.")
+
+    attempt_topic_id = topic_id if scope == "topic" else None
+    attempt = VocabularyQuizAttempt.objects.create(
+        user=user,
+        scope=scope,
+        topic_id=attempt_topic_id,
+        question_type="mixed",
+        question_count=len(terms),
+    )
+    all_terms = list(
+        VocabularyTerm.objects.filter(is_active=True).values_list(
+            "word",
+            "meaning_vi",
+        )
+    )
+    answers = []
+
+    for position, term in enumerate(terms, start=1):
+        prompt_type = random.choice(question_types)
+        correct_value = (
+            term.word if prompt_type == "vi_to_en" else term.meaning_vi
+        )
+        answer_index = 0 if prompt_type == "vi_to_en" else 1
+        distractors = [
+            values[answer_index]
+            for values in all_terms
+            if values[0] != term.word and values[1] != term.meaning_vi
+        ]
+        options = random.sample(distractors, min(3, len(distractors)))
+        options.append(correct_value)
+        random.shuffle(options)
+
+        answers.append(
+            VocabularyQuizAnswer(
+                attempt=attempt,
+                term=term,
+                prompt_type=prompt_type,
+                options_json=options,
+                correct_value=correct_value,
+                position=position,
+            )
+        )
+        VocabularyProgress.objects.get_or_create(user=user, term=term)
+
+    VocabularyQuizAnswer.objects.bulk_create(answers)
+    return attempt
 
 @transaction.atomic
 def answer_quiz(*, attempt, user, position, selected):
@@ -170,5 +236,13 @@ def answer_quiz(*, attempt, user, position, selected):
 @transaction.atomic
 def submit_quiz(*, attempt, user):
     """Close a quiz and count correct answers."""
-    if attempt.user_id!=user.id: raise PermissionError('Không có quyền xem bài quiz này.')
-    attempt.correct_count=attempt.answers.filter(is_correct=True).count(); attempt.status='submitted'; attempt.submitted_at=timezone.now(); attempt.save(update_fields=['correct_count','status','submitted_at']); return attempt
+    if attempt.user_id != user.id:
+        raise PermissionError("Không có quyền xem bài quiz này.")
+
+    attempt.correct_count = attempt.answers.filter(is_correct=True).count()
+    attempt.status = "submitted"
+    attempt.submitted_at = timezone.now()
+    attempt.save(
+        update_fields=["correct_count", "status", "submitted_at"],
+    )
+    return attempt

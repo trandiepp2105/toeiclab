@@ -64,10 +64,13 @@ def token_pair(user):
     refresh=RefreshToken.for_user(user)
     return {'access':str(refresh.access_token),'refresh':str(refresh)}
 def asset_url(path):
-    if not path:return ''
-    path=str(path).lstrip('./')
-    if path.split('/')[0].isdigit():path='zenlish_data/'+path
-    return '/assets/'+path
+    if not path:
+        return ''
+
+    path = str(path).lstrip('./')
+    if path.split('/')[0].isdigit():
+        path = 'zenlish_data/' + path
+    return '/assets/' + path
 def user_json(user):
     return {
         'id': str(user.pk),
@@ -78,20 +81,87 @@ def user_json(user):
         'permissions': sorted(user.get_admin_permission_codes()),
     }
 def term_json(term):
-    assets={x.asset_role:asset_url(x.storage_path) for x in term.assets.all()}
-    return {'id':term.pk,'word':term.word,'level':term.level,'part_of_speech':term.part_of_speech,'pronunciation':term.pronunciation,'meaning_vi':term.meaning_vi,'example_en':term.example_en,'image':assets.get('image',''),'audio_word':assets.get('word_audio',''),'audio_example':assets.get('example_audio','')}
-def question_json(q,include_key=False):
-    media=q.media or {};html=q.prompt_html or ''
-    def rewrite_images(source,paths):
+    assets = {
+        asset.asset_role: asset_url(asset.storage_path)
+        for asset in term.assets.all()
+    }
+    return {
+        'id': term.pk,
+        'word': term.word,
+        'level': term.level,
+        'part_of_speech': term.part_of_speech,
+        'pronunciation': term.pronunciation,
+        'meaning_vi': term.meaning_vi,
+        'example_en': term.example_en,
+        'image': assets.get('image', ''),
+        'audio_word': assets.get('word_audio', ''),
+        'audio_example': assets.get('example_audio', ''),
+    }
+
+
+def question_json(question, include_key=False):
+    media = question.media or {}
+    html = question.prompt_html or ''
+
+    def rewrite_images(source, paths):
         for path in paths:
-            name=str(path).split('/')[-1]
-            source=re.sub(r'(<img\b[^>]*\bsrc=["\'])[^"\']*('+re.escape(name)+r')(["\'])',lambda m:m.group(1)+asset_url(path)+m.group(3),source,flags=re.I)
+            name = str(path).split('/')[-1]
+            image_pattern = (
+                r'(<img\b[^>]*\bsrc=["\'])[^"\']*('
+                + re.escape(name)
+                + r')(["\'])'
+            )
+            source = re.sub(
+                image_pattern,
+                lambda match: (
+                    match.group(1)
+                    + asset_url(path)
+                    + match.group(3)
+                ),
+                source,
+                flags=re.I,
+            )
         return source
-    html=rewrite_images(html,media.get('images',[]))
-    passage_html=q.passage.content_html if q.passage_id else ''
-    if q.passage_id:passage_html=rewrite_images(passage_html,q.passage.assets or [])
-    data={'id':q.pk,'number':q.number,'part_number':q.exam_part.part_number,'title':q.title,'question':q.prompt,'content_html':html,'options':{o.option_key:o.answer_text for o in q.options.all()},'explanation':{'reason':q.explanation_reason,'tip':q.explanation_tip},'transcript':q.transcript,'audio_files':[asset_url(x) for x in media.get('audio',[])],'image_files':[asset_url(x) for x in media.get('images',[])],'passage_id':q.passage_id,'passage_html':passage_html,'passage_assets':[asset_url(x) for x in (q.passage.assets if q.passage_id else [])]}
-    if include_key:data['correct_answer']=q.correct_option
+
+    html = rewrite_images(html, media.get('images', []))
+    passage_html = (
+        question.passage.content_html if question.passage_id else ''
+    )
+    if question.passage_id:
+        passage_html = rewrite_images(
+            passage_html,
+            question.passage.assets or [],
+        )
+
+    data = {
+        'id': question.pk,
+        'number': question.number,
+        'part_number': question.exam_part.part_number,
+        'title': question.title,
+        'question': question.prompt,
+        'content_html': html,
+        'options': {
+            option.option_key: option.answer_text
+            for option in question.options.all()
+        },
+        'explanation': {
+            'reason': question.explanation_reason,
+            'tip': question.explanation_tip,
+        },
+        'transcript': question.transcript,
+        'audio_files': [asset_url(path) for path in media.get('audio', [])],
+        'image_files': [asset_url(path) for path in media.get('images', [])],
+        'passage_id': question.passage_id,
+        'passage_html': passage_html,
+        'passage_assets': [
+            asset_url(path)
+            for path in (
+                question.passage.assets if question.passage_id else []
+            )
+        ],
+    }
+    if include_key:
+        data['correct_answer'] = question.correct_option
     return data
 def exam_json(exam, include_readiness=False):
     data={'id':exam.external_id,'slug':exam.slug,'title':exam.title,'year':exam.year,'source_url':exam.source_url,'question_count':exam.question_count,'answer_count':exam.answer_count,'answers_complete':exam.question_count>0 and exam.question_count==exam.answer_count,'has_attempted':getattr(exam,'has_attempted',False),'time_limit_seconds':exam.time_limit_seconds,'parts':[{'number':p.part_number,'title':p.title,'name':PART_NAMES.get(p.part_number),'question_count':p.question_count} for p in exam.parts.all()]}
@@ -139,7 +209,8 @@ def register_request_otp(request):
     if not payload.is_valid():
         log_event(logger, logging.WARNING, 'otp_send_failed', service='auth', error_code='invalid_request', status_code=400)
         return Response(payload.errors,status=400)
-    email=payload.validated_data['email'];password=payload.validated_data['password']
+    email = payload.validated_data['email']
+    password = payload.validated_data['password']
     if User.objects.filter(email__iexact=email).exists():
         log_event(logger, logging.WARNING, 'otp_send_failed', service='auth', error_code='account_exists', status_code=409)
         return error('Email đã đăng ký.',409)
@@ -173,11 +244,22 @@ def register_verify(request):
     if not payload.is_valid():
         log_event(logger, logging.WARNING, 'otp_verification_failed', service='auth', error_code='invalid_request', status_code=400)
         return Response(payload.errors,status=400)
-    email=payload.validated_data['email'];code=payload.validated_data['otp'];challenge=OtpChallenge.objects.filter(email=email,purpose='register',verified_at__isnull=True).order_by('-sent_at').first()
+    email = payload.validated_data['email']
+    code = payload.validated_data['otp']
+    challenge = (
+        OtpChallenge.objects.filter(
+            email=email,
+            purpose='register',
+            verified_at__isnull=True,
+        )
+        .order_by('-sent_at')
+        .first()
+    )
     if not challenge or challenge.expires_at<timezone.now() or challenge.attempts>=5:
         log_event(logger, logging.WARNING, 'otp_verification_failed', service='auth', error_code='otp_expired_or_unavailable', status_code=400)
         return error('OTP hết hạn hoặc không hợp lệ.')
-    challenge.attempts+=1;challenge.save(update_fields=['attempts'])
+    challenge.attempts += 1
+    challenge.save(update_fields=['attempts'])
     if not check_password(code,challenge.code_hash):
         log_event(logger, logging.WARNING, 'otp_verification_failed', service='auth', error_code='otp_invalid', status_code=400)
         return error('OTP không chính xác.')
@@ -189,7 +271,8 @@ def register_verify(request):
     )
     user.password = challenge.password_hash
     user.save(update_fields=['password', 'email_verified'])
-    challenge.verified_at=timezone.now();challenge.save(update_fields=['verified_at'])
+    challenge.verified_at = timezone.now()
+    challenge.save(update_fields=['verified_at'])
     log_event(logger, logging.INFO, 'registration_completed', service='auth', user_id=user.pk)
     return Response({**token_pair(user),'user':user_json(user)},status=201)
 @api_view(['POST'])
@@ -266,11 +349,13 @@ def change_password(request):
     if not request.user.is_authenticated:return error('Bạn cần đăng nhập.',401)
     payload=ChangePasswordSerializer(data=request.data)
     if not payload.is_valid():return Response(payload.errors,status=400)
-    current=payload.validated_data['current_password'];new=payload.validated_data['new_password']
+    current = payload.validated_data['current_password']
+    new = payload.validated_data['new_password']
     if not request.user.check_password(current):
         log_event(logger, logging.WARNING, 'password_change_failed', service='auth', user_id=request.user.pk, error_code='current_password_invalid', status_code=400)
         return error('Mật khẩu hiện tại không chính xác.',400)
-    request.user.set_password(new);request.user.save(update_fields=['password'])
+    request.user.set_password(new)
+    request.user.save(update_fields=['password'])
     log_event(logger, logging.INFO, 'password_changed', service='auth', user_id=request.user.pk)
     return Response({'message':'Đã cập nhật mật khẩu.'})
 
@@ -413,7 +498,12 @@ def exam_list(request):
     params=ExamListQuerySerializer(data=query_params_without_blank(request,'answers','year'))
     if not params.is_valid():return Response(params.errors,status=400)
     filters=params.validated_data
-    qs=Exam.objects.filter(status='published').prefetch_related('parts').order_by('-year','title','external_id');state=filters.get('answers')
+    qs = (
+        Exam.objects.filter(status='published')
+        .prefetch_related('parts')
+        .order_by('-year', 'title', 'external_id')
+    )
+    state = filters.get('answers')
     if request.user.is_authenticated:
         qs=qs.annotate(has_attempted=Exists(TestAttempt.objects.filter(exam_id=OuterRef('pk'),user=request.user)))
     else:
@@ -424,7 +514,8 @@ def exam_list(request):
     if query:qs=qs.filter(title__icontains=query)
     year_query=filters.get('year')
     if year_query is not None:qs=qs.filter(year=year_query)
-    page=filters['page'];size=filters['page_size']
+    page = filters['page']
+    size = filters['page_size']
     count=qs.count()
     payloads=[exam_json(x) for x in qs[(page-1)*size:page*size]]
     groups=group_exam_payloads(payloads)
@@ -486,7 +577,12 @@ def part_detail(request,exam_slug,part_number):
     params=AttemptQuerySerializer(data=query_params_without_blank(request,'attempt'))
     if not params.is_valid():return Response(params.errors,status=400)
     attempt_id=params.validated_data.get('attempt')
-    selected={};attempt=TestAttempt.objects.filter(pk=attempt_id,exam=exam).first() if attempt_id else None
+    selected = {}
+    attempt = (
+        TestAttempt.objects.filter(pk=attempt_id, exam=exam).first()
+        if attempt_id
+        else None
+    )
     if attempt and (not attempt.user_id or attempt.user_id==getattr(request.user,'id',None)):selected={a.question_id:a.selected_option for a in attempt.answers.filter(question__in=qs)}
     return Response({'exam':exam_json(exam),'part_number':part_number,'questions':[dict(question_json(q),selected_answer=selected.get(q.pk,'')) for q in qs]})
 
@@ -833,7 +929,9 @@ def term_list(request):
     params=TermListQuerySerializer(data=query_params_without_blank(request,'topic'))
     if not params.is_valid():return Response(params.errors,status=400)
     filters=params.validated_data
-    qs=VocabularyTerm.objects.filter(is_active=True).prefetch_related('assets');topic=filters.get('topic');query=filters.get('q','').strip()
+    qs = VocabularyTerm.objects.filter(is_active=True).prefetch_related('assets')
+    topic = filters.get('topic')
+    query = filters.get('q', '').strip()
     if topic:qs=qs.filter(topic_terms__topic_id=topic)
     if query:qs=qs.filter(word__icontains=query)
     return Response([term_json(x) for x in qs.distinct()[:1000]])
@@ -1116,9 +1214,22 @@ def quiz_history(request):
     ])
 
 def attempt_json(attempt,include_answers=False):
-    qs=attempt.answers.select_related('question__exam_part','question__passage').prefetch_related('question__options').order_by('question__exam_part__part_number','question__number');items=[]
+    qs = (
+        attempt.answers.select_related('question__exam_part', 'question__passage')
+        .prefetch_related('question__options')
+        .order_by('question__exam_part__part_number', 'question__number')
+    )
+    items = []
     for answer in qs:
-        q=question_json(answer.question,include_answers or attempt.status=='submitted');q.update({'selected_answer':answer.selected_option,'is_correct':answer.is_correct});items.append(q)
+        question = question_json(
+            answer.question,
+            include_answers or attempt.status == 'submitted',
+        )
+        question.update({
+            'selected_answer': answer.selected_option,
+            'is_correct': answer.is_correct,
+        })
+        items.append(question)
     selected_part_numbers = attempt.selected_parts.values_list('exam_part__part_number', flat=True)
     directions = [
         {

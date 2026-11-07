@@ -1,9 +1,11 @@
 """Use cases for timed tests and untimed part practice."""
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
-from django.contrib.auth import get_user_model
+
 from content.models import Exam, Question, QuestionOption
-from .models import TestAttempt, AttemptPart, TestAnswer, PartScore
+
+from .models import AttemptPart, PartScore, TestAnswer, TestAttempt
 from .scoring import attempt_time_state
 
 
@@ -12,32 +14,39 @@ class ActiveFullTestExists(Exception):
 
     def __init__(self, attempt):
         self.attempt = attempt
-        super().__init__('Bạn đang có một bài thi full test chưa hoàn thành.')
+        super().__init__("Bạn đang có một bài thi full test chưa hoàn thành.")
 
 @transaction.atomic
-def start_attempt(*, exam_id, user, mode='full', selected_parts=None, time_limit_seconds=None):
+def start_attempt(
+    *,
+    exam_id,
+    user,
+    mode="full",
+    selected_parts=None,
+    time_limit_seconds=None,
+):
     """Create an authenticated attempt and freeze its selected exam parts."""
     if not getattr(user, 'is_authenticated', False):
         raise ValueError('Đăng nhập để bắt đầu làm bài thi.')
-    exam=Exam.objects.get(external_id=str(exam_id), status='published')
+    exam = Exam.objects.get(external_id=str(exam_id), status="published")
 
-    if mode == 'full':
+    if mode == "full":
         # Serializing full-test creation per user prevents two browser requests
         # from leaving multiple resumable sessions active at the same time.
         get_user_model().objects.select_for_update().get(pk=user.pk)
         active_attempts = list(
             TestAttempt.objects.select_for_update()
-            .filter(user=user, mode='full', status='in_progress')
-            .select_related('exam')
-            .order_by('-started_at')
+            .filter(user=user, mode="full", status="in_progress")
+            .select_related("exam")
+            .order_by("-started_at")
         )
         now = timezone.now()
         valid_attempts = []
 
         for active_attempt in active_attempts:
-            if attempt_time_state(active_attempt, now=now)['time_expired']:
-                active_attempt.status = 'abandoned'
-                active_attempt.save(update_fields=['status', 'last_activity_at'])
+            if attempt_time_state(active_attempt, now=now)["time_expired"]:
+                active_attempt.status = "abandoned"
+                active_attempt.save(update_fields=["status", "last_activity_at"])
             else:
                 valid_attempts.append(active_attempt)
 
@@ -57,14 +66,42 @@ def start_attempt(*, exam_id, user, mode='full', selected_parts=None, time_limit
                 pk__in=[active_attempt.pk for active_attempt in valid_attempts]
             ).update(status='abandoned', last_activity_at=now)
 
-    parts=list(exam.parts.all()); selected={int(p) for p in (selected_parts or [])}
-    if mode=='part' and len(selected)!=1: raise ValueError('Chọn đúng một Part để luyện.')
-    if mode=='subset' and not selected: raise ValueError('Chọn ít nhất một Part.')
-    chosen=[p for p in parts if mode=='full' or p.part_number in selected]
-    if not chosen: raise ValueError('Đề thi chưa có câu hỏi.')
-    attempt=TestAttempt.objects.create(exam=exam,user=user,mode=mode,time_limit_seconds=time_limit_seconds if mode!='full' else exam.time_limit_seconds)
-    AttemptPart.objects.bulk_create([AttemptPart(attempt=attempt,exam_part=p,position=i) for i,p in enumerate(chosen)])
-    TestAnswer.objects.bulk_create([TestAnswer(attempt=attempt,question=q) for q in Question.objects.filter(exam_part__in=chosen)])
+    parts = list(exam.parts.all())
+    selected = {int(part) for part in (selected_parts or [])}
+    if mode == "part" and len(selected) != 1:
+        raise ValueError("Chọn đúng một Part để luyện.")
+    if mode == "subset" and not selected:
+        raise ValueError("Chọn ít nhất một Part.")
+
+    chosen_parts = [
+        part
+        for part in parts
+        if mode == "full" or part.part_number in selected
+    ]
+    if not chosen_parts:
+        raise ValueError("Đề thi chưa có câu hỏi.")
+
+    attempt_time_limit = (
+        exam.time_limit_seconds if mode == "full" else time_limit_seconds
+    )
+    attempt = TestAttempt.objects.create(
+        exam=exam,
+        user=user,
+        mode=mode,
+        time_limit_seconds=attempt_time_limit,
+    )
+    AttemptPart.objects.bulk_create(
+        [
+            AttemptPart(attempt=attempt, exam_part=part, position=position)
+            for position, part in enumerate(chosen_parts)
+        ]
+    )
+    TestAnswer.objects.bulk_create(
+        [
+            TestAnswer(attempt=attempt, question=question)
+            for question in Question.objects.filter(exam_part__in=chosen_parts)
+        ]
+    )
     return attempt
 
 
@@ -110,39 +147,95 @@ def save_answers(*, attempt, user, answers):
     attempt=TestAttempt.objects.select_for_update().get(pk=attempt.pk)
     if not getattr(user, 'is_authenticated', False) or attempt.user_id != user.pk:
         raise PermissionError('Đăng nhập bằng đúng tài khoản để lưu câu trả lời.')
-    if attempt.status!='in_progress': raise ValueError('Bài thi đã kết thúc.')
+    if attempt.status != "in_progress":
+        raise ValueError("Bài thi đã kết thúc.")
     if attempt.mode == 'full' and attempt.exam_started_at is None:
         raise ValueError('Bấm Bắt đầu trước khi trả lời câu hỏi.')
     if attempt_time_state(attempt)['time_expired']:
         raise ValueError('Thời gian làm bài đã hết. Hãy nộp bài để xem kết quả.')
-    allowed=set(attempt.answers.values_list('question_id',flat=True))
-    for question_id,option in answers.items():
-        if int(question_id) not in allowed: raise ValueError('Câu hỏi không thuộc bài thi này.')
-        selected=str(option).upper()[:1]
-        if selected not in 'ABCD' or not QuestionOption.objects.filter(question_id=question_id,option_key=selected).exists(): raise ValueError('Lựa chọn đáp án không hợp lệ.')
-        TestAnswer.objects.filter(attempt=attempt,question_id=question_id).update(selected_option=selected,answered_at=timezone.now())
+    allowed_question_ids = set(
+        attempt.answers.values_list("question_id", flat=True)
+    )
+    for question_id, option in answers.items():
+        if int(question_id) not in allowed_question_ids:
+            raise ValueError("Câu hỏi không thuộc bài thi này.")
+
+        selected_option = str(option).upper()[:1]
+        option_exists = QuestionOption.objects.filter(
+            question_id=question_id,
+            option_key=selected_option,
+        ).exists()
+        if selected_option not in "ABCD" or not option_exists:
+            raise ValueError("Lựa chọn đáp án không hợp lệ.")
+
+        TestAnswer.objects.filter(
+            attempt=attempt,
+            question_id=question_id,
+        ).update(
+            selected_option=selected_option,
+            answered_at=timezone.now(),
+        )
     return attempt
 
 @transaction.atomic
 def submit_attempt(*, attempt_id, user):
     """Score official-key answers and close the attempt atomically."""
-    attempt=TestAttempt.objects.select_for_update().select_related('exam').get(pk=attempt_id)
-    if not getattr(user, 'is_authenticated', False) or attempt.user_id!=user.id: raise PermissionError('Không có quyền xem bài thi này.')
-    if attempt.status=='submitted': return attempt
-    if attempt.status != 'in_progress': raise ValueError('Bài thi này đã bị hủy hoặc không còn hiệu lực.')
-    if attempt.mode == 'full' and attempt.exam_started_at is None:
-        raise ValueError('Bấm Bắt đầu trước khi nộp bài thi.')
-    scores=[]
-    for part in attempt.selected_parts.select_related('exam_part'):
-        answers=TestAnswer.objects.filter(attempt=attempt,question__exam_part=part.exam_part).select_related('question'); correct=answered=scored=0
+    attempt = (
+        TestAttempt.objects.select_for_update()
+        .select_related("exam")
+        .get(pk=attempt_id)
+    )
+    if not getattr(user, "is_authenticated", False) or attempt.user_id != user.id:
+        raise PermissionError("Không có quyền xem bài thi này.")
+    if attempt.status == "submitted":
+        return attempt
+    if attempt.status != "in_progress":
+        raise ValueError("Bài thi này đã bị hủy hoặc không còn hiệu lực.")
+    if attempt.mode == "full" and attempt.exam_started_at is None:
+        raise ValueError("Bấm Bắt đầu trước khi nộp bài thi.")
+
+    scores = []
+    for part in attempt.selected_parts.select_related("exam_part"):
+        answers = TestAnswer.objects.filter(
+            attempt=attempt,
+            question__exam_part=part.exam_part,
+        ).select_related("question")
+        correct_count = 0
+        answered_count = 0
+        scored_count = 0
         for answer in answers:
-            if answer.selected_option: answered+=1
-            key=answer.question.correct_option; answer.is_correct=(answer.selected_option==key) if key else None
-            if key: scored+=1; correct+=int(answer.is_correct is True)
-            answer.save(update_fields=['is_correct'])
-        scores.append(PartScore(attempt=attempt,exam_part=part.exam_part,answered_count=answered,scored_count=scored,correct_count=correct,score_percent=(100*correct/scored if scored else 0)))
-    PartScore.objects.filter(attempt=attempt).delete(); PartScore.objects.bulk_create(scores)
-    attempt.status='submitted'; attempt.submitted_at=timezone.now(); attempt.save(update_fields=['status','submitted_at','last_activity_at']); return attempt
+            if answer.selected_option:
+                answered_count += 1
+
+            answer_key = answer.question.correct_option
+            answer.is_correct = (
+                answer.selected_option == answer_key if answer_key else None
+            )
+            if answer_key:
+                scored_count += 1
+                correct_count += int(answer.is_correct is True)
+            answer.save(update_fields=["is_correct"])
+
+        score_percent = (
+            100 * correct_count / scored_count if scored_count else 0
+        )
+        scores.append(
+            PartScore(
+                attempt=attempt,
+                exam_part=part.exam_part,
+                answered_count=answered_count,
+                scored_count=scored_count,
+                correct_count=correct_count,
+                score_percent=score_percent,
+            )
+        )
+
+    PartScore.objects.filter(attempt=attempt).delete()
+    PartScore.objects.bulk_create(scores)
+    attempt.status = "submitted"
+    attempt.submitted_at = timezone.now()
+    attempt.save(update_fields=["status", "submitted_at", "last_activity_at"])
+    return attempt
 
 
 @transaction.atomic
