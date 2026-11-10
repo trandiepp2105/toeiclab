@@ -2,14 +2,16 @@ import React, { useEffect, useState } from "react";
 import "./TopicDetailPage.scss";
 import WordGrid from "../../components/vocabulary/WordGrid/WordGrid";
 import vocabularyService from "../../services/vocabularyService";
+import quizService from "../../services/quizService";
 import { ArrowIcon, Button, Loading, Notice, SectionTitle } from "../../shared/ui";
 
 /**
  * Trang chi tiết chủ đề, tìm kiếm từ và cập nhật trạng thái đã học.
  */
-function TopicDetailPage({ slug, go }) {
+function TopicDetailPage({ slug, go, openLogin }) {
   const [topic, setTopic] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [startingQuiz, setStartingQuiz] = useState(false);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   // Tải dữ liệu khi người dùng chuyển sang chủ đề khác.
@@ -21,6 +23,28 @@ function TopicDetailPage({ slug, go }) {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [slug]);
+  const startTopicQuiz = async () => {
+    if (!topic?.id || startingQuiz) return;
+
+    setStartingQuiz(true);
+    setError("");
+    try {
+      const quiz = await quizService.createVocabularyQuiz({
+        scope: "topic",
+        topic_id: topic.id,
+        question_types: ["vi_to_en", "en_to_vi"],
+      });
+      go(`/vocabulary/quiz/${quiz.id}`);
+    } catch (requestError) {
+      if (requestError.message.includes("Đăng nhập")) {
+        openLogin?.();
+      } else {
+        setError(requestError.message);
+      }
+    } finally {
+      setStartingQuiz(false);
+    }
+  };
   const words = (topic?.words || []).filter(
     (w) =>
       w.word.toLowerCase().includes(query.toLowerCase()) ||
@@ -39,8 +63,8 @@ function TopicDetailPage({ slug, go }) {
         title={topic?.name || slug}
         description={`${topic?.words?.length || 0} từ vựng TOEIC · Hình ảnh, phát âm và câu ví dụ`}
         action={
-          <Button onClick={() => go("/vocabulary/quiz")}>
-            Làm quiz chủ đề <ArrowIcon />
+          <Button onClick={startTopicQuiz} disabled={startingQuiz || !topic?.id}>
+            {startingQuiz ? "Đang tạo quiz…" : "Làm quiz ngay"} <ArrowIcon />
           </Button>
         }
       />

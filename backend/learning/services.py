@@ -76,7 +76,7 @@ def create_quiz(
     question_types=None,
 ):
     """Build randomized bilingual questions; audio is never a quiz mode."""
-    if question_count not in (10, 20, 30):
+    if scope != "topic" and question_count not in (10, 20, 30):
         raise ValueError("Số câu chỉ có thể là 10, 20 hoặc 30.")
 
     question_types = question_types or ["vi_to_en", "en_to_vi"]
@@ -99,7 +99,8 @@ def create_quiz(
 
     terms = list(terms_query)
     random.shuffle(terms)
-    terms = terms[: min(question_count, len(terms))]
+    if scope != "topic":
+        terms = terms[: min(question_count, len(terms))]
     if not terms:
         raise ValueError("Không có từ phù hợp với lựa chọn này.")
 

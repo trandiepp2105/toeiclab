@@ -68,15 +68,6 @@
   color: #929eae;
   font-size: 10px;
 }
-.field-select {
-  width: 100%;
-  height: 39px;
-  margin-top: 10px;
-  padding: 0 10px;
-  border: 1px solid #dfe5ed;
-  border-radius: 7px;
-  background: #fff;
-}
 .count-options {
   display: flex;
   gap: 8px;
@@ -100,6 +91,11 @@
   color: #8c99ab;
   font-size: 9px;
   font-weight: 400;
+}
+.topic-quiz-note {
+  margin: 8px 2px 0;
+  color: #8291a7;
+  font-size: 11px;
 }
 .type-options {
   display: grid;

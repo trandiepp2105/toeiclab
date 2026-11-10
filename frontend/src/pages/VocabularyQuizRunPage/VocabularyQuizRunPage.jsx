@@ -12,6 +12,7 @@ function VocabularyQuizRunPage({ attemptId, go }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showFinalAnswer, setShowFinalAnswer] = useState(false);
   // Tải quiz được tạo từ trang cấu hình.
   useEffect(() => {
     quizService
@@ -63,7 +64,7 @@ function VocabularyQuizRunPage({ attemptId, go }) {
       setQuiz(updatedQuiz);
 
       if (updatedQuiz.status === "submitted") {
-        go(`/vocabulary/quiz/${attemptId}/result`);
+        setShowFinalAnswer(true);
       }
     } catch (e) {
       setError(e.message);
@@ -94,7 +95,7 @@ function VocabularyQuizRunPage({ attemptId, go }) {
   if (loading) return <Loading />;
   if (!quiz) return <Notice error={error} />;
   const q = quiz.questions[index];
-  const done = quiz.status === "submitted";
+  const done = quiz.status === "submitted" && !showFinalAnswer;
   return (
     <>
       <div className="back-row">
@@ -180,11 +181,17 @@ function VocabularyQuizRunPage({ attemptId, go }) {
                   Câu tiếp theo <ArrowIcon />
                 </Button>
               ) : (
-                <span className="quiz-completion-hint">
-                  {q.selected_value
-                    ? `Còn ${Math.max(quiz.question_count - (quiz.answered_count || 0), 0)} câu chưa trả lời.`
-                    : "Chọn đáp án để tự động hoàn thành quiz."}
-                </span>
+                quiz.status === "submitted" ? (
+                  <Button onClick={() => go(`/vocabulary/quiz/${attemptId}/result`)}>
+                    Xem thống kê <ArrowIcon />
+                  </Button>
+                ) : (
+                  <span className="quiz-completion-hint">
+                    {q.selected_value
+                      ? `Còn ${Math.max(quiz.question_count - (quiz.answered_count || 0), 0)} câu chưa trả lời.`
+                      : "Chọn đáp án để tự động hoàn thành quiz."}
+                  </span>
+                )
               )}
             </div>
             <Notice error={error} />

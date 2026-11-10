@@ -9,8 +9,9 @@ class CreateQuizSerializer(serializers.Serializer):
         default="all",
     )
     topic_id = serializers.IntegerField(required=False, allow_null=True)
-    question_count = serializers.ChoiceField(
-        choices=[10, 20, 30],
+    question_count = serializers.IntegerField(
+        min_value=1,
+        required=False,
         default=10,
     )
     question_types = serializers.ListField(
@@ -24,6 +25,14 @@ class CreateQuizSerializer(serializers.Serializer):
         if attrs["scope"] == "topic" and not attrs.get("topic_id"):
             raise serializers.ValidationError(
                 {"topic_id": "Chọn một chủ đề."}
+            )
+        if attrs["scope"] != "topic" and attrs["question_count"] not in (
+            10,
+            20,
+            30,
+        ):
+            raise serializers.ValidationError(
+                {"question_count": "Số câu chỉ có thể là 10, 20 hoặc 30."}
             )
         return attrs
 

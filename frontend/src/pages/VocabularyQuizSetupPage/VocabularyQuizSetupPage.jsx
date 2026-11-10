@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import TopicSelect from "../../components/vocabulary/TopicSelect/TopicSelect";
 import vocabularyService from "../../services/vocabularyService";
 import quizService from "../../services/quizService";
 import { ArrowIcon, Button, Notice, SectionTitle } from "../../shared/ui";
@@ -30,7 +31,7 @@ function VocabularyQuizSetupPage({ go, openLogin }) {
       const data = await quizService.createVocabularyQuiz({
         scope,
         topic_id: scope === "topic" ? topicId : null,
-        question_count: Number(count),
+        ...(scope !== "topic" && { question_count: Number(count) }),
         question_types: types,
       });
       go(`/vocabulary/quiz/${data.id}`);
@@ -80,33 +81,35 @@ function VocabularyQuizSetupPage({ go, openLogin }) {
             ))}
           </div>
           {scope === "topic" && (
-            <select
-              className="field-select"
-              value={topicId}
-              onChange={(e) => setTopicId(e.target.value)}
-            >
-              <option value="">Chọn chủ đề…</option>
-              {topics.map((t) => (
-                <option value={t.id} key={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+            <>
+              <TopicSelect
+                topics={topics}
+                value={topicId}
+                onChange={setTopicId}
+              />
+              <p className="topic-quiz-note">
+                Quiz sẽ dùng toàn bộ từ vựng trong chủ đề đã chọn.
+              </p>
+            </>
           )}
-          <h2>2. Số câu hỏi</h2>
-          <div className="count-options">
-            {[10, 20, 30].map((n) => (
-              <button
-                className={count === n ? "selected" : ""}
-                key={n}
-                onClick={() => setCount(n)}
-              >
-                {n}
-                <small>câu</small>
-              </button>
-            ))}
-          </div>
-          <h2>3. Dạng câu hỏi</h2>
+          {scope !== "topic" && (
+            <>
+              <h2>2. Số câu hỏi</h2>
+              <div className="count-options">
+                {[10, 20, 30].map((n) => (
+                  <button
+                    className={count === n ? "selected" : ""}
+                    key={n}
+                    onClick={() => setCount(n)}
+                  >
+                    {n}
+                    <small>câu</small>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <h2>{scope === "topic" ? "2." : "3."} Dạng câu hỏi</h2>
           <div className="type-options">
             <label
               className={`type-option ${types.includes("vi_to_en") ? "selected" : ""}`}
